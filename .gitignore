@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+env/
+venv/
+venvvenv/
+Backend/venvvenv/
+ENV/
+.env
+instance/
+
+# Node
+node_modules/
+Frontend/node_modules/
+
+# Vite / build
+dist/
+frontend/dist/
+build/
+
+# IDEs
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Files that may contain secrets
+token.txt
+postgresql.txt
+backend/token.txt

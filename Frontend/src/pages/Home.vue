@@ -24,7 +24,7 @@
         <!-- Icône paramètres -->
         <span class="settings" @click="openSettings">
           <i class="fas fa-cog"> </i>
-          <img src="/assets/setting_icon.png" alt="Settings" />
+          
         </span>
     </header>
 
