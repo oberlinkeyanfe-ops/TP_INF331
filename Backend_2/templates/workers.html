@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Employés{% endblock %}
+{% block content %}
+<h2>Liste des Employés</h2>
+<table>
+  <tr><th>ID</th><th>Nom</th><th>Rôle</th></tr>
+  {% for w in workers %}
+  <tr><td>{{ w.id }}</td><td>{{ w.nom }}</td><td>{{ w.role }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

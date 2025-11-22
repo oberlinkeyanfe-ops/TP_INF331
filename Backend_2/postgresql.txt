@@ -1,0 +1,4 @@
+Username : avic 
+Mot de passe : 1234
+
+DB_name : aviculture_DB

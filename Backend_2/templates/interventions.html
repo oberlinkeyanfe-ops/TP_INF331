@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Interventions{% endblock %}
+{% block content %}
+<h2>Interventions sanitaires</h2>
+<table>
+  <tr><th>ID</th><th>Date</th><th>Cause</th><th>Résultat</th></tr>
+  {% for i in interventions %}
+  <tr><td>{{ i.id }}</td><td>{{ i.date }}</td><td>{{ i.cause }}</td><td>{{ i.resultat }}</td></tr>
+  {% endfor %}
+</table>
+{% endblock %}

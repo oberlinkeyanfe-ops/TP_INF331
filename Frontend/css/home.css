@@ -1,0 +1,283 @@
+
+
+/* Layout root: sidebar + contenu */
+.home-root {
+  display: flex;            /* sidebar à gauche + contenu à droite */
+  min-height: 100vh;
+  width: 100vw;
+  background-color: #fff;
+  color: var(--text);
+  font-family: Inter, Roboto, "Segoe UI", Arial, sans-serif;
+}
+
+/* Sidebar (header) */
+.page-header {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+  align-items: stretch;
+  width: 26vw;              /* largeur stable de la sidebar */
+  min-width: 280px;         /* éviter d’être trop étroite */
+  height: 100vh;            /* pleine hauteur */
+  padding: 16px 20px;
+  background-color: rgb(245, 246, 247);
+  border-radius: 0 20px 20px 0;   /* coins droits arrondis */
+  box-shadow: 6px 0 20px rgba(13, 109, 174, 0.15); /* ombre latérale douce */
+  position: sticky;
+  top: 0;
+}
+
+/* Brand */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #1e8a1e;
+  font-size: 1rem;
+  padding: 8px 0 16px;
+  border-bottom: 1px solid #e6e8ea;
+  margin-bottom: 16px;
+}
+
+.brand img {
+  height: 48px;
+  width: 48px;
+  object-fit: contain;
+  margin: 0;
+}
+
+.brand span {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+/* Navigation tabs (vertical) */
+.onglet {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+  margin: 12px 0 auto;      /* pousse vers le bas le reste */
+}
+
+.onglet a {
+  text-decoration: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-weight: 600;
+  color: #3f413f;
+  transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Hover */
+.onglet a:hover {
+  background-color: #1b1a1a;
+  color: #fff;
+}
+
+/* Actif (persiste après le clic) */
+.onglet a.active,
+.onglet a.active:link,
+.onglet a.active:visited {
+  background-color: #000;
+  color: #fff;
+}
+
+/* User actions & profile */
+.user-actions a,
+.profile {
+  position: relative;
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-right: 20px;
+}
+
+.profile .avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: bold;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.settings {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #ffffff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  margin-bottom: 10vh;
+}
+
+.settings i {
+  font-size: 18px;
+  color: #0f0d0d;
+
+}
+
+.settings img {
+  width: 20px;
+  height: 20px;
+}
+
+
+.profile .dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  background: #fff;
+  border: 1px solid rgba(0,0,0,0.06);
+  padding: 12px;
+  border-radius: 8px;
+  box-shadow: 0 8px 20px rgba(11,11,11,0.06);
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile .dropdown a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+/* Main area (contenu à droite) */
+.main-area {
+  flex: 1;
+  min-width: 0; 
+  margin: 0;            /* pour éviter overflow en flex */
+  display: flex;
+  flex-direction: column;
+}
+
+
+.user-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 70px;
+  box-shadow: 6px 0 10px rgba(13, 109, 174, 0.15); /* ombre latérale douce */
+  height: 24vh;
+}
+
+.user-header h1 {
+  margin-left: 10vw;
+
+}
+
+
+
+
+/* Accueil onglet */
+.accueil-onglet {
+  padding: 24px;
+  border-radius: 12px;
+  width: 100%;
+  min-height: calc(100vh - 48px); /* remplir visuellement sous padding */
+}
+
+.accueil-onglet h2 {
+  margin-top: 0;
+  color: var(--primary);
+  font-size: 1.6rem;
+}
+
+.accueil-onglet p {
+  color: rgba(43,43,43,0.8);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+
+/* Buttons */
+.btn-primary {
+  display: inline-block;
+  margin-top: 16px;
+  background: var(--primary);
+  color: #1b1a1a;
+  padding: 10px 18px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 700;
+  transition: background 0.2s ease;
+}
+
+.btn-primary:hover {
+  background: #1e8a1e;
+  color: #fff;
+}
+
+.btn-secondary {
+  display: inline-block;
+  margin-top: 14px;
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.08);
+  color: var(--muted);
+  padding: 8px 14px;
+  border-radius: 10px;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+/* Bands list */
+.bands-onglet {
+  padding: 16px;
+}
+
+.band-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+
+.band-item {
+  background: #fff;
+  border-radius: 10px;
+  padding: 16px;
+  cursor: pointer;
+  border: 1px solid rgba(0,0,0,0.04);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.band-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 24px rgba(11,11,11,0.08);
+}
+
+.band-item h3 {
+  margin: 0 0 8px 0;
+  color: var(--primary);
+  font-size: 1.2rem;
+}
+
+.band-item p {
+  margin: 4px 0;
+  color: rgba(43,43,43,0.75);
+  font-size: 0.95rem;
+}
+
+/* Dashboard & help */
+.dashbord-onglet,
+.aide-onglet {
+  padding: 20px;
+  background: var(--panel);
+  border-radius: 10px;
+  box-shadow: 0 6px 18px rgba(11,11,11,0.03);
+}
+
+/* Utilities */
+.muted { color: rgba(43,43,43,0.6); }
+
+

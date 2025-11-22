@@ -1,0 +1,822 @@
+{% extends "base.html" %}
+{% block title %}Gestion des Bandes{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2>Gestion des Bandes</h2>
+    
+    <!-- Menu des fonctions - seulement en mode gestion -->
+    {% if gestion_mode %}
+    <div class="functions-menu">
+        <button class="function-btn active" onclick="showSection('ajouter')">➕ Ajouter</button>
+        <button class="function-btn" onclick="showSection('import-csv')">📤 Importer CSV</button>
+        <button class="function-btn" onclick="showSection('liste')">📋 Liste</button>
+        <button class="function-btn" onclick="showSection('rechercher')">🔍 Rechercher</button>
+        <button class="function-btn" onclick="showSection('statistiques')">📊 Statistiques</button>
+        <button class="function-btn" onclick="syncCompteurs()" style="background: #28a745; color: white;">🔄 Synchroniser</button>
+    </div>
+    {% endif %}
+
+    <!-- Messages flash -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div style="margin: 1rem 0;">
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- Section Ajouter -->
+    <div id="ajouter" class="function-section {% if gestion_mode %}active{% else %}always-visible{% endif %}">
+        <div class="card">
+            <h3>Ajouter une Nouvelle Bande</h3>
+            <form method="POST" action="{{ url_for('bandes.create_bande') }}" id="createForm">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Nom de la bande *</label>
+                        <input type="text" name="nom_bande" placeholder="Nom de la bande" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Date d'arrivée *</label>
+                        <input type="date" name="date_arrivee" required value="{{ today }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Race</label>
+                        <input type="text" name="race" placeholder="Race des poulets">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Fournisseur</label>
+                        <input type="text" name="fournisseur" placeholder="Nom du fournisseur">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Nombre initial *</label>
+                        <input type="number" name="nombre_initial" placeholder="Nombre de poussins" required min="1">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Poids moyen initial (kg)</label>
+                        <input type="number" step="0.01" name="poids_moyen_initial" placeholder="Poids moyen" min="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Âge moyen (jours)</label>
+                        <input type="number" step="0.1" name="age_moyen" placeholder="Âge moyen" min="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Nouveaux nés initiaux</label>
+                        <input type="number" name="nombre_nouveaux_nes" placeholder="Nombre de nouveaux nés" min="0" value="0">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Morts totaux initiaux</label>
+                        <input type="number" name="nombre_morts_totaux" placeholder="Nombre de morts" min="0" value="0">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Statut</label>
+                        <select name="statut">
+                            <option value="active">Active</option>
+                            <option value="terminee">Terminée</option>
+                            <option value="archivee">Archivée</option>
+                        </select>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-success">Créer la Bande</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Section Importation CSV -->
+    <div id="import-csv" class="function-section">
+        <div class="card">
+            <h3>📤 Importer des Bandes depuis un CSV</h3>
+            
+            <div style="margin-bottom: 1.5rem; background: #f8f9fa; padding: 1.5rem; border-radius: 8px;">
+                <h4>📋 Format du fichier CSV requis:</h4>
+                <div style="background: white; padding: 1rem; border-radius: 5px; font-family: monospace; font-size: 0.9rem; border: 1px solid #dee2e6;">
+                    <strong>En-têtes obligatoires:</strong><br>
+                    nom_bande,date_arrivee,nombre_initial<br><br>
+                    <strong>En-têtes optionnels:</strong><br>
+                    race,fournisseur,poids_moyen_initial,age_moyen,nombre_nouveaux_nes,nombre_morts_totaux,statut<br><br>
+                    <strong>Exemple:</strong><br>
+                    nom_bande,date_arrivee,race,fournisseur,nombre_initial,poids_moyen_initial,age_moyen,nombre_nouveaux_nes,nombre_morts_totaux,statut<br>
+                    Bande A,2024-01-15,Poulet de chair,Fournisseur Cameroun,500,0.45,1,0,0,active<br>
+                    Bande B,2024-02-01,Pondeuse,Élevage National,300,1.2,90,25,5,active
+                </div>
+            </div>
+
+            <form id="importForm" method="POST" action="{{ url_for('bandes.import_bandes_csv') }}" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="csv_file">Sélectionner le fichier CSV:</label>
+                    <input type="file" name="csv_file" id="csv_file" accept=".csv" required class="form-control" style="padding: 0.5rem;">
+                    <small class="form-text text-muted">Format accepté: .csv (max 10MB)</small>
+                </div>
+                
+                <div class="form-actions">
+                    <button type="button" onclick="downloadTemplate()" class="btn btn-info">📥 Télécharger le Template</button>
+                    <button type="submit" class="btn btn-success">📤 Importer les Bandes</button>
+                </div>
+            </form>
+            
+            <div id="importResults" style="margin-top: 1rem;"></div>
+        </div>
+    </div>
+
+    <!-- Section Liste -->
+    <div id="liste" class="function-section {% if not gestion_mode %}active{% endif %}">
+        <div class="card">
+            <div class="card-header" style="display: flex; justify-content: between; align-items: center;">
+                <h3>Liste des Bandes ({{ bandes|length }})</h3>
+                <div>
+                    <button onclick="exportToExcel()" class="btn btn-info">📊 Exporter Excel</button>
+                    <button onclick="downloadTemplate()" class="btn btn-outline-primary">📥 Template CSV</button>
+                </div>
+            </div>
+            
+            <div class="table-container">
+                <table id="bandesTable">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Nom</th>
+                            <th>Date arrivée</th>
+                            <th>Race</th>
+                            <th>Fournisseur</th>
+                            <th>Nb initial</th>
+                            <th>Nb ajoutés</th>
+                            <th>Total actuel</th>
+                            <th>Poids</th>
+                            <th>Âge</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for bande in bandes %}
+                        <tr data-bande-id="{{ bande.id }}">
+                            <td>{{ bande.id }}</td>
+                            <td><strong>{{ bande.nom_bande }}</strong></td>
+                            <td>{{ bande.date_arrivee.strftime('%d/%m/%Y') if bande.date_arrivee else 'N/A' }}</td>
+                            <td>{{ bande.race or 'N/A' }}</td>
+                            <td>{{ bande.fournisseur or 'N/A' }}</td>
+                            <td>{{ bande.nombre_initial }}</td>
+                            <td>
+                                <span class="badge {% if bande.nbre_ajoute > 0 %}badge-success{% else %}badge-secondary{% endif %}">
+                                    {{ bande.nbre_ajoute }}
+                                </span>
+                            </td>
+                            <td>
+                                <strong>{{ bande.nombre_initial + bande.nbre_ajoute - bande.nombre_morts_totaux }}</strong>
+                            </td>
+                            <td>{{ bande.poids_moyen_initial or 'N/A' }} kg</td>
+                            <td>{{ bande.age_moyen or 'N/A' }} jours</td>
+                            <td>
+                                <span class="status-badge status-{{ bande.statut }}">
+                                    {{ bande.statut }}
+                                </span>
+                            </td>
+                            <td class="actions">
+                                <button onclick="showEditForm({{ bande.id }})" class="btn btn-warning btn-sm">✏️</button>
+                                <button onclick="showDetails({{ bande.id }})" class="btn btn-info btn-sm">👁️</button>
+                                <form action="{{ url_for('bandes.delete_bande', id=bande.id) }}" method="POST" style="display: inline;">
+                                    <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Supprimer cette bande et tous ses animaux ?')">🗑️</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="12" style="text-align: center;">Aucune bande enregistrée</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Section Rechercher - seulement en mode gestion -->
+    {% if gestion_mode %}
+    <div id="rechercher" class="function-section">
+        <div class="card">
+            <h3>Rechercher une Bande</h3>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Rechercher par nom, race ou fournisseur..." class="search-input">
+                <button onclick="searchBandes()" class="btn btn-primary">🔍 Rechercher</button>
+            </div>
+            <div id="searchResults" class="search-results"></div>
+        </div>
+    </div>
+
+    <!-- Section Statistiques - seulement en mode gestion -->
+    <div id="statistiques" class="function-section">
+        <div class="card">
+            <h3>Statistiques des Bandes</h3>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <h4>Total Bandes</h4>
+                    <span class="stat-number">{{ bandes|length }}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Bandes Actives</h4>
+                    <span class="stat-number">{{ bandes|selectattr('statut', 'equalto', 'active')|list|length }}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Animaux Initiaux</h4>
+                    <span class="stat-number">{{ bandes|sum(attribute='nombre_initial') }}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Animaux Ajoutés</h4>
+                    <span class="stat-number">{{ bandes|sum(attribute='nbre_ajoute') }}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Total Animaux</h4>
+                    <span class="stat-number">
+                        {{ (bandes|sum(attribute='nombre_initial') + bandes|sum(attribute='nbre_ajoute')) }}
+                    </span>
+                </div>
+                <div class="stat-card">
+                    <h4>Moyenne Âge</h4>
+                    <span class="stat-number">
+                        {% set ages = bandes|map(attribute='age_moyen')|select|list %}
+                        {{ (ages|sum / ages|length)|round(1) if ages|length > 0 else 0 }}j
+                    </span>
+                </div>
+            </div>
+
+            <!-- Détails par statut -->
+            <div style="margin-top: 2rem;">
+                <h4>Répartition par Statut</h4>
+                <div class="stats-grid">
+                    {% for statut in ['active', 'terminee', 'archivee'] %}
+                    <div class="stat-card">
+                        <h4>{{ statut|title }}</h4>
+                        <span class="stat-number">
+                            {{ bandes|selectattr('statut', 'equalto', statut)|list|length }}
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal pour les détails de la bande -->
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <span class="close">&times;</span>
+        <h3>Détails de la Bande</h3>
+        <div id="modalContent"></div>
+    </div>
+</div>
+
+<style>
+.functions-menu {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+
+.function-btn {
+    padding: 0.75rem 1.5rem;
+    background: #f8f9fa;
+    border: 2px solid #dee2e6;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s;
+}
+
+.function-btn:hover {
+    background: #e9ecef;
+    border-color: #007bff;
+}
+
+.function-btn.active {
+    background: #007bff;
+    color: white;
+    border-color: #007bff;
+}
+
+.function-section {
+    display: none;
+}
+
+.function-section.active,
+.function-section.always-visible {
+    display: block;
+    animation: fadeIn 0.3s ease-in;
+}
+
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.search-container {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.search-input {
+    flex: 1;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+
+.search-results {
+    margin-top: 1rem;
+}
+
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    border-left: 4px solid #007bff;
+}
+
+.stat-card h4 {
+    margin: 0 0 0.5rem 0;
+    color: #6c757d;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+}
+
+.stat-card .stat-number {
+    font-size: 1.8rem;
+    font-weight: bold;
+    color: #007bff;
+}
+
+.status-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-transform: uppercase;
+}
+
+.status-active {
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+
+.status-terminee {
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeaa7;
+}
+
+.status-archivee {
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+
+.badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 10px;
+    font-size: 0.75rem;
+    font-weight: bold;
+}
+
+.badge-success {
+    background: #d4edda;
+    color: #155724;
+}
+
+.badge-secondary {
+    background: #e2e3e5;
+    color: #383d41;
+}
+
+.btn-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+}
+
+.actions {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: nowrap;
+}
+
+.form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 1.5rem;
+    flex-wrap: wrap;
+}
+
+.form-control {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    font-size: 1rem;
+}
+
+.form-text {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.875rem;
+    color: #6c757d;
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    background-color: white;
+    margin: 5% auto;
+    padding: 2rem;
+    border-radius: 8px;
+    width: 80%;
+    max-width: 600px;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.close {
+    color: #aaa;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: black;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.import-success {
+    background: #d4edda;
+    color: #155724;
+    padding: 1rem;
+    border-radius: 5px;
+    margin-top: 1rem;
+}
+
+.import-error {
+    background: #f8d7da;
+    color: #721c24;
+    padding: 1rem;
+    border-radius: 5px;
+    margin-top: 1rem;
+}
+
+.import-warning {
+    background: #fff3cd;
+    color: #856404;
+    padding: 1rem;
+    border-radius: 5px;
+    margin-top: 1rem;
+}
+</style>
+
+<script>
+// Navigation entre les sections
+function showSection(sectionId) {
+    document.querySelectorAll('.function-section').forEach(section => {
+        section.classList.remove('active');
+    });
+    
+    document.querySelectorAll('.function-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    
+    document.getElementById(sectionId).classList.add('active');
+    event.target.classList.add('active');
+}
+
+// Télécharger le template CSV
+async function downloadTemplate() {
+    try {
+        const response = await fetch('/bandes/download-template');
+        const data = await response.json();
+        
+        if (data.csv) {
+            const blob = new Blob([data.csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'template_bandes.csv';
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            showNotification('✅ Template téléchargé avec succès!', 'success');
+        } else {
+            throw new Error('Erreur lors du téléchargement du template');
+        }
+    } catch (error) {
+        showNotification('❌ Erreur lors du téléchargement: ' + error.message, 'error');
+    }
+}
+
+// Gestion du formulaire d'importation
+document.getElementById('importForm')?.addEventListener('submit', function(e) {
+    const fileInput = document.getElementById('csv_file');
+    const resultsDiv = document.getElementById('importResults');
+    
+    if (!fileInput.files[0]) {
+        e.preventDefault();
+        resultsDiv.innerHTML = '<div class="import-error">❌ Veuillez sélectionner un fichier CSV</div>';
+        return;
+    }
+    
+    // Afficher un message de chargement
+    resultsDiv.innerHTML = '<div style="text-align: center; padding: 1rem;">📤 Importation en cours...</div>';
+});
+
+// Fonction pour afficher les notifications
+function showNotification(message, type) {
+    // Créer une notification temporaire
+    const notification = document.createElement('div');
+    notification.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        padding: 1rem 1.5rem;
+        border-radius: 5px;
+        color: white;
+        font-weight: 500;
+        z-index: 10000;
+        animation: slideIn 0.3s ease-out;
+    `;
+    
+    if (type === 'success') {
+        notification.style.background = '#28a745';
+    } else if (type === 'error') {
+        notification.style.background = '#dc3545';
+    } else {
+        notification.style.background = '#007bff';
+    }
+    
+    notification.textContent = message;
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        notification.remove();
+    }, 5000);
+}
+
+// Recherche de bandes
+async function searchBandes() {
+    const searchTerm = document.getElementById('searchInput').value;
+    const resultsDiv = document.getElementById('searchResults');
+    
+    if (!searchTerm) {
+        resultsDiv.innerHTML = '<p style="color: #666; text-align: center;">Veuillez entrer un terme de recherche</p>';
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/bandes/search?q=${encodeURIComponent(searchTerm)}`);
+        const bandes = await response.json();
+        
+        if (bandes.length === 0) {
+            resultsDiv.innerHTML = '<p style="color: #666; text-align: center;">Aucune bande trouvée</p>';
+        } else {
+            let html = '<div class="table-container"><table><thead><tr><th>Nom</th><th>Race</th><th>Fournisseur</th><th>Nb Initial</th><th>Nb Ajoutés</th><th>Statut</th></tr></thead><tbody>';
+            bandes.forEach(bande => {
+                html += `<tr>
+                    <td><strong>${bande.nom_bande}</strong></td>
+                    <td>${bande.race || 'N/A'}</td>
+                    <td>${bande.fournisseur || 'N/A'}</td>
+                    <td>${bande.nombre_initial}</td>
+                    <td>${bande.nbre_ajoute}</td>
+                    <td><span class="status-badge status-${bande.statut}">${bande.statut}</span></td>
+                </tr>`;
+            });
+            html += '</tbody></table></div>';
+            resultsDiv.innerHTML = html;
+        }
+    } catch (error) {
+        resultsDiv.innerHTML = '<p style="color: red;">Erreur lors de la recherche</p>';
+    }
+}
+
+// Synchroniser les compteurs
+async function syncCompteurs() {
+    if (!confirm('Synchroniser tous les compteurs d\'animaux ajoutés ?')) return;
+    
+    try {
+        const response = await fetch('/bandes/sync-compteurs', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (response.ok) {
+            showNotification('✅ Compteurs synchronisés avec succès!', 'success');
+            setTimeout(() => location.reload(), 1500); // Recharger après un délai
+        } else {
+            showNotification('❌ Erreur lors de la synchronisation', 'error');
+        }
+    } catch (error) {
+        showNotification('❌ Erreur: ' + error.message, 'error');
+    }
+}
+
+// Afficher les détails d'une bande
+async function showDetails(bandeId) {
+    try {
+        const response = await fetch(`/bandes/${bandeId}/details`);
+        const data = await response.json();
+        
+        const modal = document.getElementById('detailsModal');
+        const modalContent = document.getElementById('modalContent');
+        
+        modalContent.innerHTML = `
+            <div style="margin-bottom: 1rem;">
+                <h4>${data.nom_bande}</h4>
+                <p><strong>Race:</strong> ${data.race || 'N/A'}</p>
+                <p><strong>Fournisseur:</strong> ${data.fournisseur || 'N/A'}</p>
+                <p><strong>Date d'arrivée:</strong> ${new Date(data.date_arrivee).toLocaleDateString('fr-FR')}</p>
+            </div>
+            
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                <div class="stat-card">
+                    <h4>Animaux Initiaux</h4>
+                    <span class="stat-number">${data.nombre_initial}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Animaux Ajoutés</h4>
+                    <span class="stat-number">${data.nbre_ajoute}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Total Actuel</h4>
+                    <span class="stat-number">${data.total_animaux_actuels}</span>
+                </div>
+                <div class="stat-card">
+                    <h4>Morts Totaux</h4>
+                    <span class="stat-number">${data.nombre_morts_totaux}</span>
+                </div>
+            </div>
+            
+            ${data.animaux && data.animaux.length > 0 ? `
+                <h5>Animaux de la bande (${data.animaux.length} enregistrements)</h5>
+                <div class="table-container" style="max-height: 300px; overflow-y: auto;">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>État</th>
+                                <th>Nombre</th>
+                                <th>Prix</th>
+                                <th>Âge</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${data.animaux.map(animal => `
+                                <tr>
+                                    <td><span class="status-badge status-${animal.etat}">${animal.etat}</span></td>
+                                    <td>${animal.nombre}</td>
+                                    <td>${animal.prix} FCFA</td>
+                                    <td>${animal.age || 'N/A'} jours</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            ` : '<p>Aucun animal enregistré pour cette bande</p>'}
+        `;
+        
+        modal.style.display = 'block';
+    } catch (error) {
+        showNotification('❌ Erreur lors du chargement des détails: ' + error.message, 'error');
+    }
+}
+
+// Gestion du modal
+document.addEventListener('DOMContentLoaded', function() {
+    const modal = document.getElementById('detailsModal');
+    const span = document.getElementsByClassName('close')[0];
+    
+    span.onclick = function() {
+        modal.style.display = 'none';
+    }
+    
+    window.onclick = function(event) {
+        if (event.target == modal) {
+            modal.style.display = 'none';
+        }
+    }
+    
+    // Initialisation des sections
+    {% if gestion_mode %}
+    showSection('ajouter');
+    {% else %}
+    document.getElementById('liste').classList.add('active');
+    {% endif %}
+    
+    // Date par défaut pour le formulaire
+    const dateInput = document.querySelector('input[name="date_arrivee"]');
+    if (dateInput && !dateInput.value) {
+        dateInput.value = new Date().toISOString().split('T')[0];
+    }
+});
+
+// Export Excel simple
+function exportToExcel() {
+    const table = document.getElementById('bandesTable');
+    let csv = [];
+    
+    // Headers
+    let headers = [];
+    for (let i = 0; i < table.rows[0].cells.length - 1; i++) {
+        headers.push(table.rows[0].cells[i].innerText);
+    }
+    csv.push(headers.join(','));
+    
+    // Data
+    for (let i = 1; i < table.rows.length; i++) {
+        let row = [];
+        for (let j = 0; j < table.rows[i].cells.length - 1; j++) {
+            row.push(table.rows[i].cells[j].innerText.replace(',', ''));
+        }
+        csv.push(row.join(','));
+    }
+    
+    // Download
+    const csvString = csv.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'bandes_' + new Date().toISOString().split('T')[0] + '.csv';
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    showNotification('✅ Fichier exporté avec succès!', 'success');
+}
+
+// Recherche en temps réel
+document.getElementById('searchInput')?.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        searchBandes();
+    }
+});
+
+// Animation CSS pour les notifications
+const style = document.createElement('style');
+style.textContent = `
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+`;
+document.head.appendChild(style);
+</script>
+{% endblock %}

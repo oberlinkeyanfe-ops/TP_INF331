@@ -1,0 +1,11 @@
+{
+  "nom": "Ali",
+  "email": "ali@example.com",
+  "mot_de_passe": "123456",
+  "telephone": "+237600000000",
+  "adresse": "Garoua"
+}
+mon user : Maar@gmail.com - 1234
+
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc2MTE0OTcxMSwianRpIjoiNTUyMTMzZGItYTJmNy00YjUyLWJhMGQtYTIxOWJlOTVhOTJlIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6MiwibmJmIjoxNzYxMTQ5NzExLCJleHAiOjE3NjExNTA2MTF9.am16FHHuKjFF3t9T_8Z5VV1sEjIH9LIQ9wvyyQCp2Wg",
+

@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}Consommations{% endblock %}
+
+{% block content %}
+
+<h2>Suivi des Consommations</h2>
+
+{% if error %}
+<div style="color:red; margin-bottom:15px;">
+    Erreur : {{ error }}
+</div>
+{% endif %}
+
+<!-- Formulaire d'ajout d'une consommation -->
+<form id="consommationForm" method="POST" action="{{ url_for('consommations.create_consommation') }}">
+    <h3>Ajouter une consommation</h3>
+
+    <label>Bande :</label>
+    <select name="bande_id" required>
+        <option value="">Sélectionner...</option>
+        {% for b in bandes %}
+        <option value="{{ b.id }}">{{ b.nom }} (ID: {{ b.id }})</option>
+        {% endfor %}
+    </select>
+
+    <br><br>
+
+    <label>Date :</label>
+    <input type="date" name="date" required>
+
+    <br><br>
+
+    <label>Type d'aliment :</label>
+    <input type="text" name="type_aliment" required>
+
+    <br><br>
+
+    <label>Coût de l'aliment :</label>
+    <input type="number" name="cout_aliment" step="0.01" required>
+
+    <br><br>
+
+    <label>Aliment (kg) :</label>
+    <input type="number" name="aliment_kg" step="0.01" required>
+
+    <br><br>
+
+    <label>Eau (litres) :</label>
+    <input type="number" name="eau_litres" step="0.01" required>
+
+    <br><br>
+
+    <label>Semaine de production (optionnel) :</label>
+    <input type="number" name="semaine_production" min="0">
+
+    <br><br>
+
+    <button type="submit">Ajouter</button>
+</form>
+
+<hr>
+
+<h3>Historique des consommations</h3>
+
+<table border="1" cellspacing="0" cellpadding="6">
+    <tr>
+        <th>ID</th>
+        <th>Bande</th>
+        <th>Date</th>
+        <th>Type aliment</th>
+        <th>Coût</th>
+        <th>Aliment (kg)</th>
+        <th>Eau (L)</th>
+        <th>Semaine prod.</th>
+    </tr>
+
+    {% for c in consommations %}
+    <tr>
+        <td>{{ c.id }}</td>
+        <td>{{ c.bande_id }}</td>
+        <td>{{ c.date }}</td>
+        <td>{{ c.type_aliment }}</td>
+        <td>{{ c.cout_aliment }}</td>
+        <td>{{ c.aliment_kg }}</td>
+        <td>{{ c.eau_litres }}</td>
+        <td>{{ c.semaine_production if c.semaine_production else '-' }}</td>
+    </tr>
+    {% endfor %}
+</table>
+
+{% endblock %}

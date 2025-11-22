@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Aviculture Pro - Test API</title>
+<style>
+body { font-family: 'Segoe UI', sans-serif; background: #f3f6fa; color: #333; margin: 0; padding: 0; }
+header { background: #1976d2; color: white; padding: 15px; text-align: center; }
+.container { max-width: 800px; margin: 30px auto; background: white; border-radius: 10px; padding: 25px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+h2 { border-bottom: 2px solid #1976d2; padding-bottom: 5px; }
+input, textarea, select { width: 100%; margin: 8px 0; padding: 10px; border: 1px solid #ccc; border-radius: 6px; }
+button { background: #1976d2; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; margin-top: 10px; }
+button:hover { background: #125ea8; }
+pre { background: #222; color: #eee; padding: 15px; border-radius: 8px; overflow-x: auto; }
+.hidden { display: none; }
+.menu-button { width: 100%; text-align: left; margin: 5px 0; }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>🐔 Aviculture Pro - Test API</h1>
+</header>
+
+<div class="container" id="auth-section">
+    <h2>🔐 Authentification</h2>
+    <p>Veuillez vous inscrire ou vous connecter pour accéder aux fonctionnalités.</p>
+    
+    <h3>Inscription</h3>
+    <input type="text" id="nom" placeholder="Nom complet" required>
+    <input type="email" id="email" placeholder="Email" required>
+    <input type="password" id="mot_de_passe" placeholder="Mot de passe" required>
+    <input type="text" id="telephone" placeholder="Téléphone">
+    <textarea id="adresse" placeholder="Adresse"></textarea>
+    <button onclick="register()">S'inscrire</button>
+
+    <h3>Connexion</h3>
+    <input type="email" id="login_email" placeholder="Email">
+    <input type="password" id="login_password" placeholder="Mot de passe">
+    <button onclick="login()">Se connecter</button>
+</div>
+
+<div class="container hidden" id="main-section">
+    <h2>✅ Connecté</h2>
+    <p id="welcome-msg"></p>
+    <button onclick="logout()">Déconnexion</button>
+    <h3>Menu</h3>
+    <button class="menu-button" onclick="showOnly('bandes-section')">🐣 Gestion des Bandes</button>
+    <button class="menu-button" onclick="showOnly('chatbot-section')">🤖 Chatbot</button>
+    <button class="menu-button" onclick="showOnly('predictions-section')">🔮 Prédictions</button>
+</div>
+
+<!-- Gestion des Bandes -->
+<div class="container hidden" id="bandes-section">
+    <h2>🐣 Gestion des Bandes</h2>
+    <button onclick="showCreateBande()">➕ Créer une bande</button>
+    <button onclick="showUpdateBande()">✏️ Modifier une bande</button>
+    <button onclick="showDeleteBande()">❌ Supprimer une bande</button>
+    <button onclick="showSearchBande()">🔍 Rechercher une bande</button>
+    <button onclick="getAllBandes()">📄 Afficher toutes les bandes</button>
+    <button onclick="getAllUsers()">👥 Afficher tous les utilisateurs</button>
+
+    <div id="create-bande" class="hidden">
+        <h3>Créer une nouvelle bande</h3>
+        <input type="text" id="nom_bande" placeholder="Nom de la bande" required>
+        <input type="date" id="date_arrivee" required>
+        <input type="text" id="race" placeholder="Race">
+        <input type="text" id="fournisseur" placeholder="Fournisseur">
+        <input type="number" id="nombre_initial" placeholder="Nombre initial" required>
+        <input type="number" step="0.01" id="poids_moyen_initial" placeholder="Poids moyen initial (kg)">
+        <button onclick="createBande()">Créer</button>
+    </div>
+
+    <div id="update-bande" class="hidden">
+        <h3>Modifier une bande</h3>
+        <input type="number" id="update_bande_id" placeholder="ID de la bande">
+        <input type="text" id="update_nom_bande" placeholder="Nom de la bande">
+        <input type="date" id="update_date_arrivee">
+        <input type="text" id="update_race" placeholder="Race">
+        <input type="text" id="update_fournisseur" placeholder="Fournisseur">
+        <input type="number" id="update_nombre_initial" placeholder="Nombre initial">
+        <input type="number" step="0.01" id="update_poids_moyen_initial" placeholder="Poids moyen initial (kg)">
+        <button onclick="updateBande()">Modifier</button>
+    </div>
+
+    <div id="delete-bande" class="hidden">
+        <h3>Supprimer une bande</h3>
+        <input type="number" id="delete_bande_id" placeholder="ID de la bande">
+        <button onclick="deleteBande()">Supprimer</button>
+    </div>
+
+    <div id="search-bande" class="hidden">
+        <h3>Rechercher une bande</h3>
+        <input type="text" id="search_input" placeholder="Nom ou ID">
+        <button onclick="searchBandes()">Rechercher</button>
+    </div>
+
+    <div id="bandes-list"></div>
+</div>
+
+<!-- Chatbot -->
+<div class="container hidden" id="chatbot-section">
+    <h2>🤖 Chatbot</h2>
+    <textarea id="message_chat" placeholder="Posez une question à votre assistant..."></textarea>
+    <button onclick="sendMessage()">Envoyer</button>
+</div>
+
+<!-- Prédictions -->
+<div class="container hidden" id="predictions-section">
+    <h2>🔮 Prédictions</h2>
+    <button onclick="getPredictions()">Afficher les prédictions</button>
+</div>
+
+<div class="container">
+    <h2>🧾 Réponse du serveur</h2>
+    <pre id="output">Aucune requête effectuée...</pre>
+</div>
+
+<script>
+let token = null;
+let eleveur = null;
+
+function show(data) {
+    document.getElementById("output").textContent = JSON.stringify(data, null, 2);
+}
+
+function hideAllBandesSections() {
+    ['create-bande','update-bande','delete-bande','search-bande','bandes-list'].forEach(id => document.getElementById(id).classList.add('hidden'));
+}
+
+function showOnly(id) {
+    ['bandes-section','chatbot-section','predictions-section'].forEach(sec => {
+        if(sec===id) document.getElementById(sec).classList.remove('hidden');
+        else document.getElementById(sec).classList.add('hidden');
+    });
+}
+
+// Affichage sections CRUD
+function showCreateBande(){ hideAllBandesSections(); document.getElementById('create-bande').classList.remove('hidden'); }
+function showUpdateBande(){ hideAllBandesSections(); document.getElementById('update-bande').classList.remove('hidden'); }
+function showDeleteBande(){ hideAllBandesSections(); document.getElementById('delete-bande').classList.remove('hidden'); }
+function showSearchBande(){ hideAllBandesSections(); document.getElementById('search-bande').classList.remove('hidden'); }
+
+// 🔐 Authentification
+async function register() {
+    const res = await fetch('/api/auth/register', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            nom: document.getElementById("nom").value,
+            email: document.getElementById("email").value,
+            mot_de_passe: document.getElementById("mot_de_passe").value,
+            telephone: document.getElementById("telephone").value,
+            adresse: document.getElementById("adresse").value
+        })
+    });
+    const data = await res.json(); show(data);
+    if(res.status===201) alert("✅ Inscription réussie ! Connectez-vous maintenant.");
+}
+
+async function login() {
+    const res = await fetch('/api/auth/login',{
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+            email: document.getElementById("login_email").value,
+            password: document.getElementById("login_password").value
+        })
+    });
+    const data = await res.json(); show(data);
+    if(res.status===200){
+        token=data.token; eleveur=data.eleveur;
+        document.getElementById("auth-section").classList.add("hidden");
+        document.getElementById("main-section").classList.remove("hidden");
+        document.getElementById("welcome-msg").textContent = "Bienvenue, "+eleveur.nom+" ("+eleveur.email+")";
+    } else alert("❌ Email ou mot de passe incorrect");
+}
+
+function logout() {
+    token=null; eleveur=null;
+    document.getElementById("auth-section").classList.remove("hidden");
+    document.getElementById("main-section").classList.add("hidden");
+    ['bandes-section','chatbot-section','predictions-section'].forEach(sec=>document.getElementById(sec).classList.add('hidden'));
+    hideAllBandesSections();
+    show("Déconnecté");
+}
+
+// CRUD Bandes
+async function createBande() {
+    const data = {
+        nom_bande: document.getElementById("nom_bande").value,
+        date_arrivee: document.getElementById("date_arrivee").value,
+        race: document.getElementById("race").value,
+        fournisseur: document.getElementById("fournisseur").value,
+        nombre_initial: parseInt(document.getElementById("nombre_initial").value),
+        poids_moyen_initial: parseFloat(document.getElementById("poids_moyen_initial").value)
+    };
+    const res = await fetch('/api/bandes/',{
+        method:'POST',
+        headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},
+        body:JSON.stringify(data)
+    });
+    show(await res.json());
+    hideAllBandesSections();
+}
+
+async function getAllBandes() {
+    const res = await fetch('/api/bandes/',{headers:{'Authorization':'Bearer '+token}});
+    const bandes = await res.json();
+    displayBandes(bandes);
+}
+
+async function getAllUsers() {
+    const res = await fetch('/api/users/',{headers:{'Authorization':'Bearer '+token}});
+    const users = await res.json();
+    const container=document.getElementById("bandes-list"); container.innerHTML='';
+    if(!users.length){ container.textContent="Aucun utilisateur trouvé"; return; }
+    users.forEach(u=>{
+        const div=document.createElement('div');
+        div.style.border="1px solid #ccc"; div.style.margin="5px 0"; div.style.padding="10px";
+        div.innerHTML=`<strong>ID:${u.id} - ${u.nom}</strong><br>Email: ${u.email} | Téléphone: ${u.telephone || '-'}<br>Adresse: ${u.adresse || '-'}`;
+        container.appendChild(div);
+    });
+}
+
+function displayBandes(bandes){
+    hideAllBandesSections();
+    document.getElementById('bandes-list').classList.remove('hidden');
+    const container=document.getElementById("bandes-list"); container.innerHTML='';
+    if(!bandes.length){ container.textContent="Aucune bande trouvée"; return; }
+    bandes.forEach(b=>{
+        const div=document.createElement('div'); div.style.border="1px solid #ccc"; div.style.margin="5px 0"; div.style.padding="10px";
+        div.innerHTML=`<strong>ID:${b.id} - ${b.nom_bande}</strong><br>Date d'arrivée: ${b.date_arrivee} | Nombre initial: ${b.nombre_initial} | Race: ${b.race || '-'}<br>Fournisseur: ${b.fournisseur || '-'} | Poids moyen initial: ${b.poids_moyen_initial || '-'} kg<br>
+        <button onclick="prefillUpdate(${b.id},'${b.nom_bande}','${b.date_arrivee}','${b.race}','${b.fournisseur}',${b.nombre_initial},${b.poids_moyen_initial})">Modifier</button>
+        <button onclick="deleteBande(${b.id})">Supprimer</button>`;
+        container.appendChild(div);
+    });
+}
+
+function prefillUpdate(id,nom,date,race,fournisseur,nombre,poids){
+    showUpdateBande();
+    document.getElementById("update_bande_id").value=id;
+    document.getElementById("update_nom_bande").value=nom;
+    document.getElementById("update_date_arrivee").value=date;
+    document.getElementById("update_race").value=race;
+    document.getElementById("update_fournisseur").value=fournisseur;
+    document.getElementById("update_nombre_initial").value=nombre;
+    document.getElementById("update_poids_moyen_initial").value=poids;
+}
+
+async function updateBande(){
+    const id=parseInt(document.getElementById("update_bande_id").value); if(!id){ alert("ID requis"); return; }
+    const data={};
+    ['nom_bande','date_arrivee','race','fournisseur','nombre_initial','poids_moyen_initial'].forEach(f=>{
+        const val=document.getElementById("update_"+f).value;
+        if(val){ if(f==='nombre_initial') data[f]=parseInt(val); else if(f==='poids_moyen_initial') data[f]=parseFloat(val); else data[f]=val; }
+    });
+    const res=await fetch(`/api/bandes/${id}`,{method:'PUT',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(data)});
+    show(await res.json()); hideAllBandesSections();
+}
+
+async function deleteBande(id=null){
+    if(!id) id=parseInt(document.getElementById("delete_bande_id").value); if(!id){ alert("ID requis"); return; }
+    const res=await fetch(`/api/bandes/${id}`,{method:'DELETE',headers:{'Authorization':'Bearer '+token}});
+    show(await res.json()); hideAllBandesSections();
+}
+
+async function searchBandes(){
+    const query=document.getElementById("search_input").value.toLowerCase();
+    const res=await fetch('/api/bandes/',{headers:{'Authorization':'Bearer '+token}});
+    const bandes=await res.json();
+    const results=bandes.filter(b=>b.nom_bande.toLowerCase().includes(query)||b.id.toString()===query);
+    displayBandes(results);
+}
+
+// 🤖 Chatbot
+async function sendMessage(){
+    const res=await fetch('/api/chatbot/',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify({message:document.getElementById("message_chat").value})});
+    show(await res.json());
+}
+
+// 🔮 Prédictions
+async function getPredictions(){
+    const res=await fetch('/api/predictions/',{headers:{'Authorization':'Bearer '+token}});
+    show(await res.json());
+}
+</script>
+
+</body>
+</html>
