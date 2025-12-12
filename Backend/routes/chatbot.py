@@ -1,10 +1,18 @@
-from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for
-from modeles.models import db, MessageChatbot, Bande, Consommation, Depense, Traitement
+from flask import Blueprint, request, jsonify, session
+from modeles.models import db, MessageChatbot, Bande, Consommation, depense_elt, Traitement
 from datetime import datetime, timedelta
 from sqlalchemy import func
 import json
+from flask_login import login_required
 
 chatbot_bp = Blueprint('chatbot', __name__)
+
+# Appliquer à toutes les routes du blueprint
+@chatbot_bp.before_request
+@login_required
+def require_login():
+    """Vérifie l'authentification pour toutes les routes"""
+    pass
 
 def get_donnees_eleveur(eleveur_id):
     """Récupère les données de l'éleveur pour le contexte"""
@@ -21,7 +29,7 @@ def get_donnees_eleveur(eleveur_id):
         
         for bande in bandes:
             # Dépenses de la bande
-            total_depenses = db.session.query(func.sum(Depense.montant)).filter_by(
+            total_depenses = db.session.query(func.sum(depense_elt.cout)).filter_by(
                 bande_id=bande.id
             ).scalar() or 0
             
@@ -142,10 +150,15 @@ def analyser_bandes(question, donnees):
 
 @chatbot_bp.route('/')
 def chatbot_page():
+    """Return basic chatbot metadata (REST)."""
     if 'eleveur_id' not in session:
-        return redirect(url_for('auth.login'))
-    
-    return render_template('chatbot.html')
+        return jsonify({'error': 'Non connecté'}), 401
+
+    return jsonify({
+        'name': 'Assistant Avicole',
+        'capabilities': ['coûts', 'consommation', 'traitements', 'bandes', 'prédictions'],
+        'message': 'Envoyez POST /ask {message: ...} pour poser une question.'
+    })
 
 @chatbot_bp.route('/ask', methods=['POST'])
 def ask_question():

@@ -1,0 +1,578 @@
+/* =========================================
+   1. Variables & Reset Global
+   ========================================= */
+:root {
+    /* Palette de couleurs inspirée de l'image cible */
+    --sidebar-bg: #2a2a4a;         /* Bleu nuit foncé */
+    --sidebar-hover: rgba(255, 255, 255, 0.1);
+    --main-bg: #f4f7fe;            /* Gris très clair pour le fond principal */
+    --card-bg: #ffffff;            /* Blanc pour les cartes */
+    --primary-accent: #6f42c1;     /* Violet/Indigo pour les actions principales */
+    --text-dark: #2b3674;          /* Couleur de texte principale (titres) */
+    --text-body: #707eae;          /* Couleur de texte secondaire */
+    --border-color: #e0e5f2;
+
+    /* Styles génériques */
+    --border-radius-card: 16px;
+    --border-radius-btn: 8px;
+    --shadow-card: 0px 4px 20px rgba(0, 0, 0, 0.05);
+    --sidebar-width: 260px;
+    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: var(--font-family);
+    background-color: var(--main-bg);
+    color: var(--text-body);
+}
+
+* {
+    box-sizing: border-box;
+}
+
+ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Reset des boutons pour qu'ils n'aient pas de style par défaut */
+button {
+    background: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: inherit;
+    color: inherit;
+    font-size: 14px;
+}
+
+h1, h2, h3 {
+    color: var(--text-dark);
+    margin-top: 0;
+    font-weight: 700;
+}
+
+.muted {
+    color: var(--text-body);
+    font-size: 0.9em;
+}
+
+/* =========================================
+   2. Structure Principale (Layout)
+   ========================================= */
+.bande-root {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden; /* Empêche le scroll global */
+}
+
+/* --- Sidebar (Gauche) --- */
+.bande-tabs {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background-color: var(--sidebar-bg);
+    color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    flex-shrink: 0;
+}
+
+/* Bouton retour en haut */
+.bande-tabs > div:first-child {
+    padding: 0 20px 20px 20px;
+}
+
+.logo{
+    display: flex;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.logo img{
+    width: 30px;
+    height: 30px;
+}
+
+button.back:hover { opacity: 1; }
+
+/* Conteneur des liens de navigation */
+.tabs {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 20px 15px;
+    width: 100%;
+    border-right: none;
+    overflow-y: auto;
+    flex-grow: 1;
+}
+
+/* Style des éléments de menu (span wrapper) */
+.logo-section {
+    display: flex;
+    align-items: center;
+    padding: 10px 15px;
+    border-radius: var(--border-radius-btn);
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+}
+
+/* Icônes dans la sidebar */
+.logo-section img {
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+    /* Filtre pour rendre les icônes blanches/grises si ce sont des SVG noirs */
+    filter: invert(1) opacity(0.8);
+}
+
+/* Le bouton à l'intérieur du span */
+.logo-section button {
+    text-align: left;
+    flex-grow: 1;
+    padding: 2px 0;
+    font-weight: 500;
+}
+
+/* États Hover et Active */
+.logo-section:hover {
+    background-color: var(--sidebar-hover);
+    color: white;
+}
+.logo-section:hover img { opacity: 1; }
+
+/* Style de l'élément actif */
+.logo-section button.active {
+    /* On triche un peu : on stylise le bouton pour qu'il remplisse son parent */
+    color: white !important;
+    font-weight: 600;
+}
+/* Ajouter une petite barre verticale ou un fond pour l'état actif */
+.logo-section:has(button.active) {
+     background-color: rgba(255, 255, 255, 0.15);
+     color: white;
+}
+.logo-section:has(button.active)::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 10%;
+    height: 80%;
+    width: 4px;
+    background-color: var(--primary-accent);
+    border-radius: 0 4px 4px 0;
+}
+
+
+/* Sous-menus (Santé) */
+.subtabs {
+    padding-left: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 5px;
+}
+.subtab-item button {
+    padding: 8px 12px;
+    width: 100%;
+    text-align: left;
+    border-radius: var(--border-radius-btn);
+    color: rgba(255, 255, 255, 0.7);
+    font-size: 13px;
+}
+.subtab-item button:hover, .subtab-item button.active {
+    background-color: var(--sidebar-hover);
+    color: white;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    text-align: center;
+}
+.settings i {
+    font-size: 20px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: 0.2s;
+}
+.settings i:hover { opacity: 1; }
+
+
+/* --- Zone Principale (Droite) --- */
+.main-section {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    background-color: var(--main-bg);
+    overflow-y: auto; /* Le scroll se fait ici */
+}
+
+
+/* =========================================
+   3. Header et Navigation Supérieure
+   ========================================= */
+.bande-header {
+display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 25px 30px;
+    background: transparent; /* Fond transparent pour se fondre dans le main-bg */
+    border-bottom: none;
+    flex-shrink: 0;
+    height: 30vh;
+    
+}
+
+.button-back{
+    width: 30px;
+    height: 30px;
+    background-image: url("../src/assets/icons/back.svg");
+}
+
+
+.title h1 {
+    font-size: 24px;
+    margin-bottom: 5px;
+}
+.meta {
+    font-size: 14px;
+}
+
+/* Barre de recherche (Style "Pilule") */
+.search {
+    display: flex;
+    align-items: center;
+    position: relative;
+    margin: 0 30px;
+    flex-grow: 1;
+    max-width: 400px;
+}
+
+.search input.search {
+    width: 100%;
+    height: auto; /* Reset */
+    padding: 12px 20px 12px 45px; /* Espace à gauche pour l'icône */
+    border-radius: 30px;
+    border: 1px solid transparent;
+    background-color: var(--card-bg);
+    box-shadow: var(--shadow-card);
+    color: var(--text-dark);
+    font-size: 14px;
+    transition: all 0.2s;
+}
+.search input.search:focus {
+    outline: none;
+    border-color: var(--primary-accent);
+}
+.search i.fa-search {
+    position: absolute;
+    left: 15px;
+    color: var(--text-body);
+    pointer-events: none;
+}
+
+/* Bouton AI / Notification (remplace l'image par une icône générique si l'image manque) */
+.ai {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    background-color: var(--card-bg);
+    box-shadow: var(--shadow-card);
+    /* Si l'image de fond ne charge pas, on met une couleur de fallback */
+    background-image: url("../src/assets/icons/ai.svg"); /* Assurez-vous que le chemin est correct */
+    background-size: 24px;
+    background-repeat: no-repeat;
+    background-position: center;
+    cursor: pointer;
+    transition: transform 0.2s;
+}
+.ai:hover {
+    transform: translateY(-2px);
+}
+
+
+/* =========================================
+   4. Dashboard et Contenu des Onglets
+   ========================================= */
+.bande-main {
+    padding: 0 30px 30px 30px;
+    flex-grow: 1;
+}
+
+/* Style générique des "Cartes" du dashboard */
+.kpi,
+.charts-placeholder,
+.orders-list,
+.right-card,
+.tab-panel:not(.dashboard-panel) /* Appliquer aussi aux autres onglets */
+{
+    background-color: var(--card-bg);
+    border-radius: var(--border-radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 25px;
+    margin-bottom: 25px;
+    border: 1px solid rgba(255, 255, 255, 0.5); /* Légère bordure */
+}
+
+
+/* Grille spécifique au Dashboard */
+.dashboard-panel {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 25px;
+    /* On enlève le style de carte du conteneur grille lui-même */
+    background: none; box-shadow: none; padding: 0; border: none;
+}
+
+/* Rangée des KPIs (Haut) */
+.kpi-row {
+    grid-column: span 12;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 25px;
+    margin-bottom: 0; /* La marge est gérée par le gap de la grille parente */
+}
+
+.kpi {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-bottom: 0; /* Reset */
+    font-size: 14px;
+    color: var(--text-body);
+}
+.kpi strong {
+    display: block;
+    font-size: 28px;
+    color: var(--text-dark);
+    margin-top: 10px;
+    font-weight: 700;
+}
+
+/* Zone des graphiques (Gauche, large) */
+.charts-placeholder {
+    grid-column: span 8; /* Prend 2/3 de la largeur */
+    min-height: 350px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-style: italic;
+    color: var(--text-body);
+    border: 2px dashed var(--border-color); /* Placeholder visual style */
+}
+
+/* Section charts (DashboardCharts.vue) */
+.dashboard-charts {
+    grid-column: span 12;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.dashboard-charts .charts-row {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 20px;
+}
+
+.dashboard-charts .chart-item {
+    grid-column: span 6;
+    background: var(--card-bg);
+    border-radius: var(--border-radius-card);
+    box-shadow: var(--shadow-card);
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.dashboard-charts .chart-item.full-width {
+    grid-column: span 12;
+}
+
+.dashboard-charts h3 {
+    margin: 0;
+    color: var(--text-dark);
+    font-size: 16px;
+    font-weight: 600;
+}
+
+@media (max-width: 1200px) {
+    .dashboard-charts .charts-row {
+        grid-template-columns: repeat(2, minmax(280px, 1fr));
+    }
+    .dashboard-charts .chart-item {
+        grid-column: span 2;
+    }
+    .dashboard-charts .chart-item.full-width {
+        grid-column: span 2;
+    }
+}
+
+@media (max-width: 768px) {
+    .dashboard-charts .charts-row {
+        grid-template-columns: 1fr;
+    }
+    .dashboard-charts .chart-item,
+    .dashboard-charts .chart-item.full-width {
+        grid-column: span 1;
+    }
+}
+
+/* Liste des commandes (sous les graphiques) */
+.orders-list {
+    grid-column: span 8;
+}
+
+/* Colonne de droite (Widgets) */
+.right-column {
+    grid-column: span 4; /* Prend 1/3 de la largeur */
+    display: flex;
+    flex-direction: column;
+    gap: 25px;
+}
+.right-card {
+    margin-bottom: 0; /* Reset */
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+
+/* =========================================
+   5. Styles spécifiques aux autres onglets
+   ========================================= */
+
+/* Formulaires (ex: Consommation) */
+.consumption-form {
+    display: flex;
+    gap: 15px;
+    flex-wrap: wrap;
+    margin-bottom: 30px;
+    background: #f8f9fa; /* Fond très léger pour le formulaire */
+    padding: 20px;
+    border-radius: var(--border-radius-card);
+}
+.consumption-form input {
+    padding: 12px 15px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--border-radius-btn);
+    flex: 1 1 150px; /* Responsive flex */
+    font-family: inherit;
+}
+.consumption-form input:focus {
+    outline: none;
+    border-color: var(--primary-accent);
+}
+
+/* Bouton d'action principal (ex: Ajouter) */
+button.btn[type="submit"], button.btn {
+    background-color: var(--primary-accent);
+    color: white;
+    padding: 12px 25px;
+    border-radius: var(--border-radius-btn);
+    font-weight: 600;
+    box-shadow: 0 4px 10px rgba(111, 66, 193, 0.2);
+    transition: all 0.2s;
+}
+button.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 15px rgba(111, 66, 193, 0.3);
+}
+
+/* Listes de données (Consommations, Animaux) */
+.consumption-list, .animaux-list {
+    background: var(--card-bg);
+    border-radius: var(--border-radius-card);
+    /* box-shadow: var(--shadow-card); Le conteneur parent l'a déjà */
+    overflow: hidden;
+}
+.consumption-list li, .animaux-list li {
+    padding: 15px 20px;
+    border-bottom: 1px solid var(--border-color);
+}
+.consumption-list li:last-child, .animaux-list li:last-child {
+    border-bottom: none;
+}
+.c-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+/* Chatbot styles de base */
+.chatbox {
+    display: flex;
+    flex-direction: column;
+    height: 500px;
+}
+.messages {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: var(--border-radius-card);
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.msg {
+    padding: 10px 15px;
+    border-radius: 20px;
+    max-width: 70%;
+}
+.msg.user {
+    align-self: flex-end;
+    background-color: var(--primary-accent);
+    color: white;
+    border-bottom-right-radius: 5px;
+}
+.msg.bot {
+    align-self: flex-start;
+    background-color: white;
+    box-shadow: var(--shadow-card);
+    color: var(--text-dark);
+    border-bottom-left-radius: 5px;
+}
+.chat-form {
+    display: flex;
+    gap: 10px;
+}
+.chat-form input {
+    flex-grow: 1;
+    padding: 12px 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 30px;
+}
+
+/* Infos Definition List */
+.info-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 20px;
+}
+.info-list div {
+    display: flex;
+    flex-direction: column;
+}
+.info-list dt {
+    font-size: 13px;
+    color: var(--text-body);
+    margin-bottom: 5px;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+.info-list dd {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-dark);
+    font-weight: 600;
+}

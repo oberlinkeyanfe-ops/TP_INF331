@@ -2,7 +2,7 @@
   <div class="auth-container">
     <div class="auth-card">
       <div class="brand">
-        <img src="/assets/LOGO.svg" alt="Logo" />
+        <img src="../assets/icons/LOGO.svg" alt="Logo" />
         <h1>Connexion</h1>
       </div>
       <form @submit.prevent="submit">
@@ -11,7 +11,11 @@
           <input v-model="email" type="email" required />
         
           <label>Mot de passe</label>
-          <input v-model="password" type="password" required />
+            <input v-model="password" type="password" required />
+        
+            <label class="remember">
+              <input type="checkbox" v-model="remember" /> Se souvenir de moi
+            </label>
         </div>
         <div class="button-sub">
           <button type="submit">Se connecter</button>
@@ -31,6 +35,7 @@ export default {
     return {
       email: '',
       password: '',
+      remember: false,
       error: '',
       user: null
     }
@@ -43,7 +48,7 @@ export default {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include', // pour envoyer les cookies si nécessaire
-          body: JSON.stringify({ email: this.email, mot_de_passe: this.password })
+          body: JSON.stringify({ email: this.email, mot_de_passe: this.password, remember: this.remember })
         })
 
         if (!res.ok) {
@@ -55,8 +60,12 @@ export default {
         // Transformer la réponse en JSON
         const data = await res.json()
 
-        // Sauvegarder l'utilisateur dans la session
-        sessionStorage.setItem("user", JSON.stringify(data.user))
+        // Sauvegarder l'utilisateur côté client : si 'remember' alors localStorage sinon sessionStorage
+        if (this.remember) {
+          localStorage.setItem("user", JSON.stringify(data.user))
+        } else {
+          sessionStorage.setItem("user", JSON.stringify(data.user))
+        }
 
         // Mettre à jour le state local
         this.user = data.user

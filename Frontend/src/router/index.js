@@ -6,9 +6,8 @@ const routes = [
   { path: '/register', name: 'Register', component: () => import('../pages/Register.vue') },
   { path: '/signout', name: 'SignOut', component: () => import('../pages/SignOut.vue') },
   { path: '/home', name: 'Home', component: () => import('../pages/Home.vue').catch(() => import('../pages/Login.vue')) },
-  { path: '/bandes', name: 'BandesList', component: () => import('../pages/BandesList.vue').catch(() => import('../pages/Login.vue')) },
-  { path: '/bandes/create', name: 'BandesCreate', component: () => import('../pages/BandesCreate.vue').catch(() => import('../pages/Login.vue')) },
-  { path: '/bandes/:id', name: 'Bande', component: () => import('../pages/Bandes.vue').catch(() => import('../pages/Login.vue')) }
+  { path: '/bandes/:id', name: 'Bande', component: () => import('../pages/Bandes.vue').catch(() => import('../pages/Login.vue')) },
+  { path: '/contact', name: 'Contact', component:() => import('../pages/Contacts.vue')}
 ]
 
 const router = createRouter({

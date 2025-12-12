@@ -3,7 +3,7 @@
   <div class="auth-container">
     <div class="auth-card">
       <div class="brand">
-        <img src="/assets/LOGO.svg" alt="Logo" />
+        <img src="../assets/icons/LOGO.svg" alt="Logo" />
         <h1>Inscription</h1>
       </div>
       <form @submit.prevent="submit">

@@ -1,15 +1,25 @@
 from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for
-from modeles.models import db, Bande, Animal, Consommation, Depense, Traitement, Intervention
+from modeles.models import db, Bande, Consommation, Traitement
 from datetime import datetime, timedelta
 from sqlalchemy import func, extract
+from flask_login import login_required
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
+
+# Appliquer à toutes les routes du blueprint
+@dashboard_bp.before_request
+@login_required
+def require_login():
+    """Vérifie l'authentification pour toutes les routes"""
+    pass
+
 @dashboard_bp.route('/')
 def dashboard_page():
+    # Return dashboard data as JSON for the authenticated eleveur
     if 'eleveur_id' not in session:
-        return redirect(url_for('auth.login'))
-    
+        return jsonify({'error': 'Non connecté'}), 401
+
     try:
         # Statistiques générales
         bandes_actives = Bande.query.filter_by(
@@ -21,10 +31,7 @@ def dashboard_page():
             eleveur_id=session['eleveur_id']
         ).scalar() or 0
         
-        total_depenses = db.session.query(func.sum(Depense.montant)).join(Bande).filter(
-            Bande.eleveur_id == session['eleveur_id']
-        ).scalar() or 0
-        
+        total_depenses = 0  # Depense model supprimé
         total_traitements = Traitement.query.join(Bande).filter(
             Bande.eleveur_id == session['eleveur_id']
         ).count()
@@ -34,25 +41,19 @@ def dashboard_page():
             Bande.eleveur_id == session['eleveur_id']
         ).order_by(Consommation.date.desc()).limit(5).all()
         
-        dernieres_depenses = Depense.query.join(Bande).filter(
-            Bande.eleveur_id == session['eleveur_id']
-        ).order_by(Depense.date.desc()).limit(5).all()
+        dernieres_depenses = []  # Depense supprimé
         
         # Bandes nécessitant attention
         bandes_attention = Bande.query.filter_by(
             eleveur_id=session['eleveur_id'],
             statut='active'
         ).filter(
-            (Bande.nombre_morts_totaux > Bande.nombre_initial * 0.1) |  # Plus de 10% de mortalité
-            (Bande.age_moyen > 180)  # Âge avancé
+            (Bande.nombre_morts_totaux > Bande.nombre_initial * 0.1)
+            | (Bande.age_moyen > 180)
         ).all()
-
-        # Nouvelles statistiques
-        nb_nouveaux_nes = db.session.query(func.sum(Animal.nouveaux_nes)).filter_by(
-            eleveur_id=session['eleveur_id']
-        ).scalar() or 0
-
-        nb_morts = db.session.query(func.sum(Animal.nombre_morts)).filter_by(
+        # Nouvelles statistiques alignées sur le modèle actuel (pas de modèle Animal/Intervention)
+        nb_nouveaux_nes = 0
+        nb_morts = db.session.query(func.sum(Bande.nombre_morts_totaux)).filter_by(
             eleveur_id=session['eleveur_id']
         ).scalar() or 0
 
@@ -60,51 +61,36 @@ def dashboard_page():
             Bande.eleveur_id == session['eleveur_id']
         ).scalar() or 0
 
-        nb_malades = db.session.query(func.count(Animal.id)).join(Traitement).join(Bande).filter(
-            Bande.eleveur_id == session['eleveur_id']
-        ).scalar() or 0
+        nb_malades = nb_maladies_rencontrees
+        nb_epidemies = 0
 
-        nb_epidemies = db.session.query(func.count(Intervention.id)).join(Bande).filter(
-            Bande.eleveur_id == session['eleveur_id'],
-            Intervention.type == 'epidemie'
-        ).scalar() or 0
+        # Serializer helper (use to_dict if available)
+        def serialize_list(items):
+            result = []
+            for it in items:
+                if hasattr(it, 'to_dict'):
+                    result.append(it.to_dict())
+                else:
+                    # fallback: include a minimal representation
+                    result.append({c.name: getattr(it, c.name) for c in getattr(it.__class__, '__table__').columns})
+            return result
 
-        # Passer toutes les variables au template
-        return render_template(
-            'dashboard.html',
-            bandes_count=0,
-            animaux_count=0,
-            depenses_total=0,
-            traitements_count=0,
-            dernieres_consommations=[],
-            dernieres_depenses=[],
-            bandes_attention=[],
-            nb_nouveaux_nes=0,
-            nb_morts=0,
-            nb_maladies_rencontrees=0,
-            nb_malades=0,
-            nb_epidemies=0,
-            error=str(e)
-        )
-
+        return jsonify({
+            'bandes_actives': bandes_actives,
+            'total_animaux': int(total_animaux),
+            'total_depenses': float(total_depenses),
+            'total_traitements': total_traitements,
+            'dernieres_consommations': serialize_list(dernieres_consommations),
+            'dernieres_depenses': serialize_list(dernieres_depenses),
+            'bandes_attention': [b.to_dict() for b in bandes_attention],
+            'nb_nouveaux_nes': int(nb_nouveaux_nes),
+            'nb_morts': int(nb_morts),
+            'nb_maladies_rencontrees': int(nb_maladies_rencontrees),
+            'nb_malades': int(nb_malades),
+            'nb_epidemies': int(nb_epidemies)
+        })
     except Exception as e:
-    # Passer toutes les variables au template en cas d'erreur
-        return render_template(
-            'dashboard.html',
-            bandes_count=0,
-            animaux_count=0,
-            depenses_total=0,
-            traitements_count=0,
-            dernieres_consommations=[],
-            dernieres_depenses=[],
-            bandes_attention=[],
-            nb_nouveaux_nes=0,
-            nb_morts=0,
-            nb_maladies_rencontrees=0,
-            nb_malades=0,
-            nb_epidemies=0,
-            error=str(e)
-        )
+        return jsonify({'error': str(e)}), 500
 
 @dashboard_bp.route('/statistiques/rapides', methods=['GET'])
 def get_statistiques_rapides():
@@ -117,10 +103,7 @@ def get_statistiques_rapides():
         debut_mois = maintenant.replace(day=1)
         
         # Dépenses du mois
-        depenses_mois = db.session.query(func.sum(Depense.montant)).join(Bande).filter(
-            Bande.eleveur_id == session['eleveur_id'],
-            Depense.date >= debut_mois
-        ).scalar() or 0
+        depenses_mois = 0  # Depense supprimé
         
         # Consommation du mois
         consommation_mois = db.session.query(func.sum(Consommation.aliment_kg)).join(Bande).filter(
@@ -135,10 +118,7 @@ def get_statistiques_rapides():
         ).count()
         
         # Interventions du mois
-        interventions_mois = Intervention.query.join(Bande).filter(
-            Bande.eleveur_id == session['eleveur_id'],
-            Intervention.date >= debut_mois
-        ).count()
+        interventions_mois = 0  # Intervention supprimé
         
         return jsonify({
             'depenses_mois': round(depenses_mois, 2),
@@ -209,20 +189,14 @@ def get_performance_bandes():
         
         performance = []
         for bande in bandes:
-            # Calculer le coût par animal
-            total_depenses = db.session.query(func.sum(Depense.montant)).filter_by(
-                bande_id=bande.id
-            ).scalar() or 0
-            
-            cout_par_animal = total_depenses / bande.nombre_initial if bande.nombre_initial > 0 else 0
-            
-            # Calculer la consommation moyenne
+            # Pas de modèle Depense : coût par animal non calculé
+            cout_par_animal = 0
+
             total_consommation = db.session.query(func.sum(Consommation.aliment_kg)).filter_by(
                 bande_id=bande.id
             ).scalar() or 0
-            
             consommation_par_animal = total_consommation / bande.nombre_initial if bande.nombre_initial > 0 else 0
-            
+
             performance.append({
                 'bande_id': bande.id,
                 'nom_bande': bande.nom_bande,

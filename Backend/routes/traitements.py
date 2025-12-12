@@ -1,40 +1,41 @@
-from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for, flash
-from modeles.models import db, Traitement, Bande, Worker
+from flask import Blueprint, request, jsonify, session
+from modeles.models import db, Traitement, Bande
 from datetime import datetime
+from flask_login import login_required
 
 traitements_bp = Blueprint('traitements', __name__)
 
+
+# Appliquer à toutes les routes du blueprint
+@traitements_bp.before_request
+@login_required
+def require_login():
+    """Vérifie l'authentification pour toutes les routes"""
+    pass
+
 @traitements_bp.route('/')
 def traitements_page():
-    """Page de gestion des traitements"""
+    """Return traitements, bandes and workers as JSON for the eleveur."""
     if 'eleveur_id' not in session:
-        return redirect(url_for('auth.login'))
-    
+        return jsonify({'error': 'Non connecté'}), 401
+
     try:
         traitements = Traitement.query.join(Bande).filter(
             Bande.eleveur_id == session['eleveur_id']
         ).order_by(Traitement.date.desc()).all()
-        
+
         bandes = Bande.query.filter_by(
             eleveur_id=session['eleveur_id'], 
             statut='active'
         ).all()
-        
-        workers = Worker.query.filter_by(actif=True).all()
-        
-        return render_template('traitements.html', 
-                             traitements=traitements, 
-                             bandes=bandes, 
-                             workers=workers,
-                             gestion_mode=True)
-        
+
+        return jsonify({
+            'traitements': [t.to_dict() for t in traitements],
+            'bandes': [b.to_dict() for b in bandes]
+        })
+
     except Exception as e:
-        return render_template('traitements.html', 
-                             traitements=[], 
-                             bandes=[], 
-                             workers=[], 
-                             error=str(e),
-                             gestion_mode=True)
+        return jsonify({'error': str(e)}), 500
 
 # Les autres fonctions existantes restent inchangées
 
@@ -57,7 +58,6 @@ def create_traitement():
         
         traitement = Traitement(
             bande_id=data['bande_id'],
-            worker_id=data['worker_id'],
             date=datetime.strptime(data['date'], '%Y-%m-%d').date(),
             produit=data['produit'],
             type_traitement=data['type_traitement'],
