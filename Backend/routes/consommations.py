@@ -117,13 +117,6 @@ def create_consommation():
         db.session.add(consommation)
 
         # Mettre à jour le poids moyen actuel si fourni
-        if 'poids_moyen_actuel' in data:
-            try:
-                bande.poids_moyen_actuel = float(data['poids_moyen_actuel'])
-            except (ValueError, TypeError):
-                db.session.rollback()
-                return jsonify({'error': 'poids_moyen_actuel doit être un nombre'}), 400
-            db.session.add(bande)
 
         db.session.commit()
         
@@ -237,12 +230,6 @@ def update_consommation(cons_id):
                 return jsonify({'error': f'Une consommation existe déjà pour la semaine {semaine_prod}. Supprimez-la ou modifiez-la avant d\'ajouter.'}), 400
         cons.semaine_production = semaine_prod
 
-        if 'poids_moyen_actuel' in data:
-            try:
-                bande.poids_moyen_actuel = float(data['poids_moyen_actuel'])
-            except (ValueError, TypeError):
-                return jsonify({'error': 'poids_moyen_actuel doit être un nombre'}), 400
-            db.session.add(bande)
 
         db.session.add(cons)
         db.session.commit()

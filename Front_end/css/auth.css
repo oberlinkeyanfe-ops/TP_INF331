@@ -1,0 +1,90 @@
+body{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  margin: 0;
+}
+
+.auth-card{
+  width:320px;
+  max-width:320px;
+  background:rgba(219, 231, 221, 0.98);
+  border-radius:12px;
+  box-shadow:0 10px 30px rgba(2,6,23,0.55);
+  padding:28px;
+  margin-top:50px;
+}
+.brand{
+  width: 100%;
+  display:flex;
+  align-items:center;
+  gap:10px;
+  margin-bottom:18px
+}
+
+
+.brand img{
+  width:106px;
+  height:100px;
+  object-fit:contain
+}
+.brand h1{
+  font-size:26px;
+  margin:0;
+  color:#25711e;
+}
+
+.button-sub{
+  width:100%;
+  display: flex;
+  justify-content:center;
+  padding:12px;
+}
+button{
+  background-color: #37a32f;
+  color:#ffffff;
+  border:none;
+  padding:12px 24px;
+  border-radius:8px;
+  cursor:pointer;
+  font-weight:600;
+  font-size:16px;
+}
+
+.input label{
+ align-items: left;
+}
+.input{
+  display: flex;
+  flex-direction: column;
+  width:100%;
+  margin-top:6px;
+  margin-bottom:16px;
+  font-size:20px;
+  
+  gap: 5px;
+}
+
+input{
+  border-radius: 5px;
+  width: 80%;
+  height: 25px;
+  margin-left: 40px;
+  border-width: 1px;
+  border-color: blanchedalmond;
+}
+
+.remember{
+  display: flex;
+  justify-items: left;
+  text-align: left;
+  font-size: 15px;
+}
+.remember input{
+  width: auto;
+}
+
+
+
+

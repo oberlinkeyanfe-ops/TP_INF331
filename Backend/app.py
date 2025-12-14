@@ -8,6 +8,7 @@ from routes.consommations import consommations_bp
 from routes.traitements import traitements_bp
 from routes.depense_elt import depenses_bp
 from routes.chatbot import chatbot_bp
+from routes.animal_info import animal_info_bp
 
 
 app = Flask(__name__)
@@ -45,6 +46,7 @@ app.register_blueprint(consommations_bp, url_prefix="/consommations")
 app.register_blueprint(traitements_bp, url_prefix="/traitements")
 app.register_blueprint(depenses_bp, url_prefix="/depenses")
 app.register_blueprint(chatbot_bp, url_prefix="/chatbot")
+app.register_blueprint(animal_info_bp, url_prefix="/animal-info")
 
 
 @app.route('/ping')

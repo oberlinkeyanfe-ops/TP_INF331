@@ -49,7 +49,6 @@ class Bande(db.Model):
     fournisseur = db.Column(db.String(100))
     nombre_initial = db.Column(db.Integer, nullable=False)
     poids_moyen_initial = db.Column(db.Float)
-    poids_moyen_actuel = db.Column(db.Float)
     statut = db.Column(db.String(20), default='active')  # active, terminee, archivee
     duree_jours = db.Column(db.Integer)  # durée prévue/observée du lot
 
@@ -62,6 +61,7 @@ class Bande(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     consommations = db.relationship('Consommation', backref='bande', lazy=True)
+    animal_infos = db.relationship('AnimalInfo', backref='bande', lazy=True, cascade='all, delete-orphan')
     depenses_elt = db.relationship('depense_elt', backref='bande', lazy=True)
     traitements = db.relationship('Traitement', backref='bande', lazy=True)
    
@@ -74,7 +74,6 @@ class Bande(db.Model):
             'fournisseur': self.fournisseur,
             'nombre_initial': self.nombre_initial,
             'poids_moyen_initial': self.poids_moyen_initial,
-            'poids_moyen_actuel': self.poids_moyen_actuel,
             'statut': self.statut,
             'duree_jours': self.duree_jours,
             'age_moyen': self.age_moyen,
@@ -117,6 +116,34 @@ class Consommation(db.Model):
 
 
 # ----------------------------
+# Informations animales par semaine
+# ----------------------------
+class AnimalInfo(db.Model):
+    __tablename__ = 'animal_info'
+
+    id = db.Column(db.Integer, primary_key=True)
+    bande_id = db.Column(db.Integer, db.ForeignKey('bandes.id'), nullable=False)
+    semaine_production = db.Column(db.Integer, nullable=False)
+    poids_moyen = db.Column(db.Float)  # kg par poule pour la semaine
+    morts_semaine = db.Column(db.Integer, default=0)
+    animaux_restants = db.Column(db.Integer)
+    note = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'bande_id': self.bande_id,
+            'semaine_production': self.semaine_production,
+            'poids_moyen': self.poids_moyen,
+            'morts_semaine': self.morts_semaine,
+            'animaux_restants': self.animaux_restants,
+            'note': self.note,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+
+# ----------------------------
 # Traitement
 # ----------------------------
 
@@ -150,7 +177,8 @@ class Traitement(db.Model):
             'efficacite': self.efficacite,
             'notes': self.notes,
             'nombre_morts_apres': self.nombre_morts_apres,
-            'nombre_gueris_apres': self.nombre_gueris_apres
+            'nombre_gueris_apres': self.nombre_gueris_apres,
+            'cout': self.cout
         }
 
 # ----------------------------
