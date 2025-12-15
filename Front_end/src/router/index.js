@@ -7,7 +7,8 @@ const routes = [
   { path: '/signout', name: 'SignOut', component: () => import('../pages/SignOut.vue') },
   { path: '/home', name: 'Home', component: () => import('../pages/Home.vue').catch(() => import('../pages/Login.vue')) },
   { path: '/bandes/:id', name: 'Bande', component: () => import('../pages/Bandes.vue').catch(() => import('../pages/Login.vue')) },
-  { path: '/contact', name: 'Contact', component:() => import('../pages/Contacts.vue')}
+  { path: '/contact', name: 'Contact', component:() => import('../pages/Contacts.vue')},
+  { path: '/aide', name: 'Aide', component:() => import('../pages/Contacts.vue') }
 ]
 
 const router = createRouter({

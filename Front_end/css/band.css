@@ -1472,6 +1472,50 @@ button.btn.secondary:hover {
     flex-direction: column;
     height: 500px;
 }
+.chat-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+.chat-mode-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+}
+.chat-mode-head label {
+    font-weight: 700;
+    color: var(--text-dark);
+}
+.chat-mode-hint {
+    font-size: 12px;
+    color: var(--text-body);
+}
+.chat-mode-pills {
+    display: inline-flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.pill-btn {
+    padding: 10px 14px;
+    border-radius: 999px;
+    border: 1px solid var(--border-color);
+    background: white;
+    color: var(--text-dark);
+    font-weight: 600;
+    transition: all 0.15s ease;
+}
+.pill-btn:hover {
+    border-color: var(--primary-accent);
+    color: var(--primary-accent);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.06);
+}
+.pill-btn.active {
+    background: var(--primary-accent);
+    color: white;
+    border-color: var(--primary-accent);
+    box-shadow: 0 8px 26px rgba(111,66,193,0.35);
+}
 .messages {
     flex-grow: 1;
     overflow-y: auto;
@@ -1487,7 +1531,20 @@ button.btn.secondary:hover {
     padding: 10px 15px;
     border-radius: 20px;
     max-width: 70%;
+    position: relative;
 }
+.msg-text { display: inline-block; }
+.msg-close {
+    position: absolute;
+    top: 6px;
+    right: 10px;
+    border: none;
+    background: transparent;
+    color: inherit;
+    opacity: 0.5;
+    cursor: pointer;
+}
+.msg-close:hover { opacity: 1; }
 .msg.user {
     align-self: flex-end;
     background-color: var(--primary-accent);
@@ -2037,3 +2094,11 @@ button.btn.secondary:hover {
         min-width: auto;
     }
 }
+
+.tab-close {
+    margin-left: 8px;
+    font-weight: 700;
+    cursor: pointer;
+    opacity: 0.6;
+}
+.tab-close:hover { opacity: 1; }

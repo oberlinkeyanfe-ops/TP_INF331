@@ -213,6 +213,7 @@ class depense_elt(db.Model):
 # ----------------------------
 # Chatbot Messages
 # ----------------------------
+# Dans modeles/models.py
 class MessageChatbot(db.Model):
     __tablename__ = 'messages_chatbot'
     
@@ -221,15 +222,9 @@ class MessageChatbot(db.Model):
     message_utilisateur = db.Column(db.Text, nullable=False)
     reponse_bot = db.Column(db.Text, nullable=False)
     date_message = db.Column(db.DateTime, default=datetime.utcnow)
+    mode_utilise = db.Column(db.String(20), default='data')  # 'data', 'hybrid', 'web'
     
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'eleveur_id': self.eleveur_id,
-            'message_utilisateur': self.message_utilisateur,
-            'reponse_bot': self.reponse_bot,
-            'date_message': self.date_message.isoformat()
-        }
-
+    def __repr__(self):
+        return f'<MessageChatbot {self.id}>'
 
 

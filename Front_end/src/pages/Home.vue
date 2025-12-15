@@ -1,47 +1,34 @@
 <template>
   <div class="home-root">
-    <!-- Sidebar -->
-    <header class="page-header">
+    <header class="topbar">
       <div class="brand">
         <img src="../assets/icons/LOGO.svg" alt="Logo" />
         <span>AVIPRO</span>
       </div>
 
-      <nav id="onglet" class="onglet">
-        <div class="sub-onglet">
-          <img src="../assets/icons/home.svg" alt="Logo" />
-          <a href="#"
-            @click.prevent="selectTab('home')"
-            :class="{ active: activeTab === 'home' }">Accueil</a>
-        </div>
-
-        <div class="sub-onglet">
-          <img src="../assets/icons/bands.svg" alt="Logo" />        
-          <a href="#"
-            @click.prevent="selectTab('bands')"
-            :class="{ active: activeTab === 'bands' }">Bands</a>
-        </div>
-
-        <div class="sub-onglet">
-          <img src="../assets/icons/dashboard.svg" alt="Logo" />
-          <a href="#"
-            @click.prevent="selectTab('dashboard')"
-            :class="{ active: activeTab === 'dashboard' }">Dashboard</a>
-        </div>  
-
-        <div class="sub-onglet">
-          <img src="../assets/icons/aide.svg" alt="Logo" />
-          <a href="#"
-            @click.prevent="selectTab('help')"
-            :class="{ active: activeTab === 'help' }">Aide</a>
-        </div>
+      <nav class="top-nav">
+        <button class="top-link" @click.prevent="selectTab('home')" :class="{ active: activeTab === 'home' }">Accueil</button>
+        <button class="top-link" @click.prevent="selectTab('bands')" :class="{ active: activeTab === 'bands' }">Bands</button>
+        <button class="top-link" @click.prevent="selectTab('dashboard')" :class="{ active: activeTab === 'dashboard' }">Dashboard</button>
+        <button class="top-link" @click.prevent="selectTab('help')" :class="{ active: activeTab === 'help' }">Aide</button>
       </nav>
 
-      <!-- Icône paramètres en bas de la sidebar -->
-      <div class="sidebar-footer">
-        <span class="settings" @click="openSettings">
-          <i class="fas fa-cog"></i>
-        </span>
+      <div class="top-actions">
+        <router-link v-if="!user" to="/login" class="btn-secondary">Se connecter</router-link>
+        <div v-else class="profile">
+          <span
+            class="avatar"
+            :style="{ backgroundColor: avatarColor }"
+            @click="toggleDropdown"
+          >
+            {{ user && user.nom ? user.nom[0].toUpperCase() : '?' }}
+          </span>
+          <div class="dropdown" v-if="dropdownOpen" @click.stop>
+            <span>{{ user.nom }}</span>
+            <span>{{ user.email }}</span>
+            <router-link to="/signout">Déconnexion</router-link>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -51,38 +38,123 @@
       <div class="user-header">
         <div class="title">
           <h1>{{ title }}</h1>
-          <p v-if="activeTab=='home'"> Bienvenue {{user ? user.nom : ''}}</p>
+          <p v-if="activeTab=='home'">Bienvenue {{ user ? user.nom : '' }}</p>
         </div>
-        <div class="actions">
-          <div v-if="!user" class="user-actions">
-            <router-link to="/register">Se connecter</router-link>
-          </div>
-
-          <div v-else class="profile">
-            <!-- Avatar cercle avec couleur aléatoire -->
-            <span
-              class="avatar"
-              :style="{ backgroundColor: avatarColor }"
-              @click="toggleDropdown"
-            >
-              {{ user && user.nom ? user.nom[0].toUpperCase() : '?' }}
-            </span>
-
-            <!-- Dropdown infos -->
-            <div class="dropdown" v-if="dropdownOpen" @click.stop>
-              <span>{{ user.nom }}</span>
-              <span>{{ user.email }}</span>
-              <router-link to="/signout">Déconnexion</router-link>
-            </div>
-          </div>
+        <div class="header-actions">
+          <button class="btn-secondary" @click="selectTab('bands')">Voir les bandes</button>
+          <router-link to="/contact" class="btn-ghost">Support</router-link>
         </div>
       </div>
 
       <!-- Onglets -->
       <div v-if="activeTab === 'home'" class="accueil-onglet">
-        <h2>Bienvenue sur AVIPRO Mr/Mme {{ user ? user.nom : '' }}</h2>
-        <p>Votre plateforme de gestion avicole.</p>
-        <router-link to="#" class="btn-primary">Commencer</router-link>
+        <!-- Hero / présentation entreprise -->
+        <section class="home-hero">
+          <div class="home-hero-text">
+            <p class="eyebrow">Plateforme avicole</p>
+            <h2>AVIPRO : piloter, anticiper, protéger</h2>
+            <p class="lede">
+              Une suite complète pour l'aviculture : suivi en temps réel, alertes sanitaires, prévisions, et assistant IA
+              relié à vos données et à la veille web. Réduisez les risques et sécurisez vos marges.
+            </p>
+            <div class="hero-actions">
+              <router-link to="/bandes/1" class="btn-primary">Ouvrir le tableau de bord</router-link>
+              <button class="btn-ghost" @click="selectTab('bands')">Créer une bande</button>
+            </div>
+            <div class="hero-badges">
+              <span class="pill">Suivi temps réel</span>
+              <span class="pill">Assistant IA</span>
+              <span class="pill">Alertes sanitaires</span>
+              <span class="pill">Prédictions</span>
+            </div>
+          </div>
+          <div class="home-hero-visual">
+            <div class="home-header-card">
+              <div>
+                <p class="eyebrow">Aperçu global</p>
+                <h3>Vue multi-bandes</h3>
+              </div>
+              <div class="mini-metrics">
+                <div><span>Bandes</span><strong>{{ bands.length || 0 }}</strong></div>
+                <div><span>Actives</span><strong>{{ bands.filter(b => b.statut === 'active').length }}</strong></div>
+                <div><span>Effectif</span><strong>{{ totalBirds }}</strong></div>
+              </div>
+              <div class="header-gradient"></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Slider visuel -->
+        <section class="home-slider" @mouseenter="stopSlideAuto" @mouseleave="startSlideAuto">
+          <div class="slide-visual" :style="slideStyle(activeSlide)">
+            <div class="slide-overlay">
+              <p class="slide-kicker">{{ activeSlide?.kicker || '' }}</p>
+              <h3>{{ activeSlide?.title || '' }}</h3>
+              <p>{{ activeSlide?.text || '' }}</p>
+            </div>
+          </div>
+          <div class="slide-nav">
+            <button class="nav-btn" @click="prevSlide">←</button>
+            <div class="dots">
+              <button
+                v-for="(s, idx) in slides"
+                :key="s.title"
+                :class="['dot', { active: idx === currentSlide }]"
+                @click="goToSlide(idx)"
+                :aria-label="'Aller au slide ' + (idx+1)"
+              ></button>
+            </div>
+            <button class="nav-btn" @click="nextSlide">→</button>
+          </div>
+        </section>
+
+        <!-- Fonctionnalités détaillées -->
+        <section class="features-section">
+          <div class="feature-card">
+            <div class="icon-pill">📊</div>
+            <h4>Tableaux de bord</h4>
+            <p>Coûts, consommations, mortalité, poids : tout en un coup d'œil, avec benchmarks intégrés.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-pill">🤖</div>
+            <h4>Assistant IA</h4>
+            <p>Questions en langage naturel, réponses basées sur vos données et la recherche web.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-pill">🛡️</div>
+            <h4>Alertes Santé</h4>
+            <p>Notifications critiques, suivi des traitements et réduction de la mortalité.</p>
+          </div>
+          <div class="feature-card">
+            <div class="icon-pill">📈</div>
+            <h4>Prédictions & marge</h4>
+            <p>Anticipation des coûts et date de vente optimale pour sécuriser vos marges.</p>
+          </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="home-footer">
+          <div class="footer-brand">
+            <img src="../assets/icons/LOGO.svg" alt="AVIPRO" />
+            <p>La plateforme avicole pour piloter, anticiper et protéger vos élevages.</p>
+          </div>
+          <div class="footer-links">
+            <h5>Contact</h5>
+            <a href="mailto:contact@avipro.com">contact@avipro.com</a>
+            <a href="tel:+237600000000">+237 60 00 00 000</a>
+          </div>
+          <div class="footer-links">
+            <h5>Réseaux</h5>
+            <a href="#">Facebook</a>
+            <a href="#">Instagram</a>
+            <a href="#">LinkedIn</a>
+          </div>
+          <div class="footer-links">
+            <h5>Support</h5>
+            <router-link to="/contact">Nous écrire</router-link>
+            <router-link to="/aide">Centre d'aide</router-link>
+          </div>
+        </footer>
       </div>
 
       <div v-if="activeTab === 'bands'" class="bands-onglet">
@@ -223,7 +295,42 @@ export default {
       },
       bandsError: '',
       avatarColor: '',
-      title: 'HOME'
+      title: 'HOME',
+      slides: [
+        {
+          title: 'Pilotage en temps réel',
+          text: 'Suivez vos bandes, vos coûts et vos consommations avec des métriques claires et des alertes immédiates.',
+          kicker: 'Tableau de bord',
+          image: '/assets/slide1.png',
+          gradient: 'linear-gradient(135deg, #6f42c1 0%, #4f46e5 100%)'
+        },
+        {
+          title: 'Assistant IA avicole',
+          text: 'Questions en français, données internes + recherche web pour décider plus vite.',
+          kicker: 'IA & contexte',
+          image: '/assets/slide2.png',
+          gradient: 'linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)'
+        },
+        {
+          title: 'Prédictions et marge',
+          text: 'Anticipez les coûts, la mortalité et la date de vente optimale pour sécuriser votre marge.',
+          kicker: 'Prévisions',
+          image: '/assets/slide3.png',
+          gradient: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)'
+        }
+      ],
+      currentSlide: 0,
+      slideTimer: null
+    }
+  },
+  computed: {
+    activeSlide() {
+      if (!this.slides || !this.slides.length) return null;
+      const idx = Math.min(Math.max(this.currentSlide, 0), this.slides.length - 1);
+      return this.slides[idx];
+    },
+    totalBirds() {
+      return (this.bands || []).reduce((acc, b) => acc + (b.nombre_initial || 0), 0);
     }
   },
   methods: {
@@ -234,15 +341,11 @@ export default {
         const res = await fetch('http://localhost:5000/bandes/', {
           method: 'GET',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          }
+          headers: { 'Content-Type': 'application/json' }
         })
-        
         if (!res.ok) {
           throw new Error(`Erreur HTTP: ${res.status}`);
         }
-        
         const data = await res.json();
         this.bands = Array.isArray(data) ? data : [];
       } catch (error) {
@@ -273,7 +376,6 @@ export default {
     async createBande() {
       this.bandsError = '';
       try {
-        // Validation
         if (!this.form.nom_bande.trim()) {
           this.bandsError = 'Le nom de la bande est requis';
           return;
@@ -282,27 +384,20 @@ export default {
         const res = await fetch('http://localhost:5000/bandes/create', {
           method: 'POST',
           credentials: 'include',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(this.form)
         })
 
         const data = await res.json();
-        
         if (!res.ok) {
           this.bandsError = data.error || data.message || 'Erreur lors de la création de la bande';
           return;
         }
 
-        // Rafraîchir la liste
         await this.fetchBandes();
         this.resetForm();
         this.showCreate = false;
-        
-        // Afficher un message de succès
         console.log('Bande créée avec succès:', data);
-        
       } catch (error) {
         console.error('Erreur createBande:', error);
         this.bandsError = 'Erreur de connexion au serveur';
@@ -327,7 +422,6 @@ export default {
     },
     
     openBand(band) {
-      // CORRECTION: Stocker les données essentielles uniquement
       const bandData = {
         id: band.id,
         nom_bande: band.nom_bande,
@@ -341,14 +435,11 @@ export default {
         nombre_morts_totaux: band.nombre_morts_totaux,
         statut: band.statut
       };
-      
-      console.log('Storing band data:', bandData);
       localStorage.setItem('current_band', JSON.stringify(bandData));
       this.$router.push(`/bandes/${band.id}`);
     },
     openSettings() {
       console.log("Ouverture des paramètres");
-      // Implémentez la logique d'ouverture des paramètres
     },
     
     loadUser() {
@@ -377,25 +468,59 @@ export default {
       if (!dateString) return '—';
       const date = new Date(dateString);
       return date.toLocaleDateString('fr-FR');
+    },
+
+    nextSlide() {
+      if (!this.slides.length) return;
+      this.currentSlide = (this.currentSlide + 1) % this.slides.length;
+    },
+    prevSlide() {
+      if (!this.slides.length) return;
+      this.currentSlide = (this.currentSlide - 1 + this.slides.length) % this.slides.length;
+    },
+    goToSlide(idx) {
+      if (idx < 0 || idx >= this.slides.length) return;
+      this.currentSlide = idx;
+    },
+    startSlideAuto() {
+      if (this.slideTimer || this.slides.length < 2) return;
+      this.slideTimer = setInterval(() => this.nextSlide(), 5200);
+    },
+    stopSlideAuto() {
+      if (this.slideTimer) {
+        clearInterval(this.slideTimer);
+        this.slideTimer = null;
+      }
+    },
+    slideStyle(slide) {
+      if (!slide) {
+        return { background: '#111827' };
+      }
+      if (slide.image) {
+        return {
+          backgroundImage: `linear-gradient(120deg, rgba(0,0,0,0.35), rgba(0,0,0,0.15)), url(${slide.image})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        };
+      }
+      return { backgroundImage: slide.gradient };
     }
   },
   mounted() {
     this.loadUser();
-    // Fermer le dropdown si on clique ailleurs
-    document.addEventListener('click', () => {
-      this.dropdownOpen = false;
-    });
-    
-    // Charger les bandes si on arrive directement sur l'onglet bands
+    const closeDropdown = () => { this.dropdownOpen = false; };
+    this._closeDropdownHandler = closeDropdown;
+    document.addEventListener('click', closeDropdown);
     if (this.activeTab === 'bands') {
       this.fetchBandes();
     }
+    this.startSlideAuto();
   },
   beforeUnmount() {
-    // Nettoyer l'event listener
-    document.removeEventListener('click', () => {
-      this.dropdownOpen = false;
-    });
+    if (this._closeDropdownHandler) {
+      document.removeEventListener('click', this._closeDropdownHandler);
+    }
+    this.stopSlideAuto();
   }
 }
 </script>

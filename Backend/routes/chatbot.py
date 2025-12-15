@@ -1,44 +1,118 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from modeles.models import db, MessageChatbot, Bande, Consommation, depense_elt, Traitement
-from datetime import datetime, timedelta
+from datetime import datetime
 from sqlalchemy import func
+import os
+import google.generativeai as genai
+from dotenv import load_dotenv
 import json
-from flask_login import login_required
+
+load_dotenv()
 
 chatbot_bp = Blueprint('chatbot', __name__)
 
-# Appliquer à toutes les routes du blueprint
+# Configuration Gemini
+GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
+gemini_model = None
+
+def init_gemini():
+    """Initialise le modèle Gemini avec gestion des erreurs"""
+    global gemini_model
+    if not GEMINI_API_KEY or GEMINI_API_KEY == "votre_cle_api_ici":
+        print("⚠️ Clé Gemini non configurée")
+        return False
+    
+    try:
+        print(f"🔧 Configuration Gemini avec clé: {GEMINI_API_KEY[:20]}...")
+        genai.configure(api_key=GEMINI_API_KEY)
+        
+        # Liste d'abord les modèles disponibles
+        try:
+            print("📋 Liste des modèles disponibles...")
+            models = genai.list_models()
+            
+            available_models = []
+            for model in models:
+                if 'generateContent' in model.supported_generation_methods:
+                    available_models.append(model.name)
+                    print(f"  - {model.name}")
+            
+            # Essayer les modèles disponibles
+            for model_name in available_models:
+                if 'flash' in model_name.lower() or 'pro' in model_name.lower():
+                    try:
+                        print(f"🔄 Essai du modèle: {model_name}")
+                        gemini_model = genai.GenerativeModel(model_name)
+                        # Test rapide
+                        test_response = gemini_model.generate_content("Test", generation_config={
+                            'max_output_tokens': 1
+                        })
+                        print(f"✅ Modèle sélectionné: {model_name}")
+                        return True
+                    except Exception as e:
+                        print(f"❌ Modèle {model_name} échoué: {str(e)[:100]}")
+                        continue
+            
+        except Exception as list_error:
+            print(f"❌ Erreur liste modèles: {list_error}")
+        
+        # Fallback: essayer les noms communs
+        common_models = [
+            'gemini-1.0-pro',
+            'gemini-pro',
+            'models/gemini-pro',
+            'gemini-1.5-pro',
+            'gemini-1.5-flash'
+        ]
+        
+        for model_name in common_models:
+            try:
+                print(f"🔄 Essai modèle fallback: {model_name}")
+                gemini_model = genai.GenerativeModel(model_name)
+                test_response = gemini_model.generate_content("Test")
+                print(f"✅ Modèle fallback réussi: {model_name}")
+                return True
+            except Exception as e:
+                print(f"❌ Modèle fallback {model_name} échoué: {str(e)[:100]}")
+                continue
+        
+        print("❌ Aucun modèle Gemini disponible")
+        return False
+        
+    except Exception as e:
+        print(f"❌ Erreur configuration Gemini: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
 @chatbot_bp.before_request
-@login_required
 def require_login():
-    """Vérifie l'authentification pour toutes les routes"""
-    pass
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
 
 def get_donnees_eleveur(eleveur_id):
-    """Récupère les données de l'éleveur pour le contexte"""
+    """Récupère les données de l'éleveur"""
     try:
         bandes = Bande.query.filter_by(eleveur_id=eleveur_id).all()
+        
         donnees = {
             'bandes': [],
             'statistiques': {
                 'total_bandes': len(bandes),
                 'bandes_actives': len([b for b in bandes if b.statut == 'active']),
-                'total_animaux': sum(b.nombre_initial for b in bandes)
+                'total_animaux': sum(b.nombre_initial for b in bandes if b.nombre_initial)
             }
         }
         
         for bande in bandes:
-            # Dépenses de la bande
             total_depenses = db.session.query(func.sum(depense_elt.cout)).filter_by(
                 bande_id=bande.id
             ).scalar() or 0
             
-            # Consommation de la bande
             total_consommation = db.session.query(func.sum(Consommation.aliment_kg)).filter_by(
                 bande_id=bande.id
             ).scalar() or 0
             
-            # Traitements de la bande
             traitements_count = Traitement.query.filter_by(bande_id=bande.id).count()
             
             donnees['bandes'].append({
@@ -47,8 +121,8 @@ def get_donnees_eleveur(eleveur_id):
                 'statut': bande.statut,
                 'nombre_initial': bande.nombre_initial,
                 'morts_totaux': bande.nombre_morts_totaux,
-                'depenses_total': round(total_depenses, 2),
-                'consommation_total': round(total_consommation, 2),
+                'depenses_total': round(float(total_depenses), 2),
+                'consommation_total': round(float(total_consommation), 2),
                 'traitements_count': traitements_count
             })
         
@@ -56,145 +130,169 @@ def get_donnees_eleveur(eleveur_id):
     except Exception as e:
         return {'erreur': str(e)}
 
-def analyser_question_manuelle(question, donnees_eleveur):
-    """Analyse manuelle de la question sans Gemini"""
-    question_lower = question.lower()
+# ⭐ AJOUTEZ CETTE ROUTE POUR LES DEUX NOMS
+@chatbot_bp.route('/analyse-complete', methods=['POST', 'OPTIONS'])
+@chatbot_bp.route('/analyse_complete', methods=['POST', 'OPTIONS'])  # Compatibilité
+def analyse_complete():
+    """Analyse approfondie - supporte les deux noms"""
+    print(f"🔍 Route appelée: {request.path}")
     
-    # Détection des mots-clés
-    if any(mot in question_lower for mot in ['bonjour', 'salut', 'hello', 'coucou']):
-        return "👋 Bonjour ! Je suis votre assistant avicole. Comment puis-je vous aider aujourd'hui ?"
-    
-    elif any(mot in question_lower for mot in ['coût', 'dépense', 'prix', 'cout']):
-        return analyser_couts(question_lower, donnees_eleveur)
-    
-    elif any(mot in question_lower for mot in ['consommation', 'aliment', 'nourriture', 'manger']):
-        return analyser_consommation(question_lower, donnees_eleveur)
-    
-    elif any(mot in question_lower for mot in ['traitement', 'médicament', 'vaccin', 'santé']):
-        return analyser_traitements(question_lower, donnees_eleveur)
-    
-    elif any(mot in question_lower for mot in ['bande', 'poulet', 'volaille']):
-        return analyser_bandes(question_lower, donnees_eleveur)
-    
-    elif any(mot in question_lower for mot in ['merci', 'ok', 'daccord']):
-        return "😊 Je vous en prie ! N'hésitez pas si vous avez d'autres questions."
-    
-    else:
-        return "🤔 Je ne suis pas sûr de comprendre votre question. Pouvez-vous la reformuler ?\n\n" \
-               "Je peux vous aider avec :\n" \
-               "• Les **coûts et dépenses** de vos bandes\n" \
-               "• La **consommation** d'aliment et d'eau\n" \
-               "• Les **traitements** et la santé\n" \
-               "• Les **performances** de vos bandes\n\n" \
-               "Essayez par exemple : 'Quel est le coût de la bande 1 ?'"
-
-def analyser_couts(question, donnees):
-    """Analyse les questions sur les coûts"""
-    if 'total' in question:
-        total_depenses = sum(b['depenses_total'] for b in donnees['bandes'])
-        return f"💰 **Dépenses totales de toutes vos bandes :** {total_depenses:,.2f} FCFA\n\n" \
-               f"📊 Répartition par bande :\n" + \
-               "\n".join([f"• {b['nom']} : {b['depenses_total']:,.2f} FCFA" for b in donnees['bandes']])
-    
-    # Détection du numéro de bande
-    for bande in donnees['bandes']:
-        if f"bande {bande['id']}" in question or bande['nom'].lower() in question:
-            return f"💰 **Dépenses de la bande {bande['nom']} :** {bande['depenses_total']:,.2f} FCFA\n\n" \
-                   f"📈 Coût par animal : {bande['depenses_total']/bande['nombre_initial']:,.2f} FCFA" \
-                   if bande['nombre_initial'] > 0 else "Aucun animal dans cette bande"
-    
-    return "💰 **Vos dépenses :**\n\n" + \
-           "\n".join([f"• {b['nom']} : {b['depenses_total']:,.2f} FCFA" for b in donnees['bandes']])
-
-def analyser_consommation(question, donnees):
-    """Analyse les questions sur la consommation"""
-    if 'total' in question:
-        total_consommation = sum(b['consommation_total'] for b in donnees['bandes'])
-        return f"🍗 **Consommation totale d'aliment :** {total_consommation:,.2f} kg\n\n" \
-               f"📊 Répartition par bande :\n" + \
-               "\n".join([f"• {b['nom']} : {b['consommation_total']:,.2f} kg" for b in donnees['bandes']])
-    
-    # Détection du numéro de bande
-    for bande in donnees['bandes']:
-        if f"bande {bande['id']}" in question or bande['nom'].lower() in question:
-            return f"🍗 **Consommation de la bande {bande['nom']} :** {bande['consommation_total']:,.2f} kg\n\n" \
-                   f"📈 Consommation par animal : {bande['consommation_total']/bande['nombre_initial']:.2f} kg" \
-                   if bande['nombre_initial'] > 0 else "Aucun animal dans cette bande"
-    
-    return "🍗 **Consommation d'aliment :**\n\n" + \
-           "\n".join([f"• {b['nom']} : {b['consommation_total']:,.2f} kg" for b in donnees['bandes']])
-
-def analyser_traitements(question, donnees):
-    """Analyse les questions sur les traitements"""
-    total_traitements = sum(b['traitements_count'] for b in donnees['bandes'])
-    
-    if 'récents' in question or 'derniers' in question:
-        return f"💊 **Traitements récents :** {total_traitements} traitements au total\n\n" \
-               f"📊 Répartition par bande :\n" + \
-               "\n".join([f"• {b['nom']} : {b['traitements_count']} traitements" for b in donnees['bandes']])
-    
-    return f"💊 **Statistiques des traitements :**\n\n" \
-           f"• Total des traitements : {total_traitements}\n" + \
-           "\n".join([f"• {b['nom']} : {b['traitements_count']} traitements" for b in donnees['bandes']])
-
-def analyser_bandes(question, donnees):
-    """Analyse les questions sur les bandes"""
-    bandes_actives = [b for b in donnees['bandes'] if b['statut'] == 'active']
-    
-    if 'active' in question or 'actuelle' in question:
-        return f"🏷️ **Bandes actives :** {len(bandes_actives)} bande(s)\n\n" + \
-               "\n".join([f"• {b['nom']} : {b['nombre_initial']} animaux" for b in bandes_actives])
-    
-    return f"🏷️ **Vos bandes :** {donnees['statistiques']['total_bandes']} bande(s) au total\n\n" + \
-           "\n".join([f"• {b['nom']} ({b['statut']}) : {b['nombre_initial']} animaux" for b in donnees['bandes']])
-
-@chatbot_bp.route('/')
-def chatbot_page():
-    """Return basic chatbot metadata (REST)."""
     if 'eleveur_id' not in session:
         return jsonify({'error': 'Non connecté'}), 401
+    
+    try:
+        donnees_eleveur = get_donnees_eleveur(session['eleveur_id'])
+        
+        if 'erreur' in donnees_eleveur:
+            return jsonify({'error': donnees_eleveur['erreur']}), 400
+        
+        # Formater le contexte
+        contexte = "ANALYSE DE L'ÉLEVAGE\n\n"
+        stats = donnees_eleveur.get('statistiques', {})
+        contexte += f"STATISTIQUES:\n"
+        contexte += f"- Total bandes: {stats.get('total_bandes', 0)}\n"
+        contexte += f"- Bandes actives: {stats.get('bandes_actives', 0)}\n"
+        contexte += f"- Total animaux: {stats.get('total_animaux', 0)}\n\n"
+        
+        if donnees_eleveur.get('bandes'):
+            contexte += "DÉTAILS DES BANDES:\n"
+            for bande in donnees_eleveur.get('bandes', []):
+                taux_mortalite = (bande['morts_totaux'] / bande['nombre_initial'] * 100) if bande['nombre_initial'] > 0 else 0
+                contexte += f"\nBande '{bande['nom']}':\n"
+                contexte += f"  Statut: {bande['statut']}\n"
+                contexte += f"  Animaux: {bande['nombre_initial']} initiaux\n"
+                contexte += f"  Morts: {bande['morts_totaux']} ({taux_mortalite:.1f}%)\n"
+                contexte += f"  Dépenses: {bande['depenses_total']} FCFA\n"
+                contexte += f"  Consommation: {bande['consommation_total']} kg\n"
+        
+        # Initialiser Gemini
+        global gemini_model
+        if gemini_model is None:
+            init_gemini()
+        
+        if gemini_model:
+            try:
+                prompt = f"""En tant qu'expert avicole, analyse ces données et donne des conseils.
 
-    return jsonify({
-        'name': 'Assistant Avicole',
-        'capabilities': ['coûts', 'consommation', 'traitements', 'bandes', 'prédictions'],
-        'message': 'Envoyez POST /ask {message: ...} pour poser une question.'
-    })
+{contexte}
 
-@chatbot_bp.route('/ask', methods=['POST'])
+Fournis une analyse utile en français avec:
+1. Points forts
+2. Points à améliorer  
+3. Recommandations concrètes
+4. Alertes si nécessaire"""
+                
+                response = gemini_model.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': 0.4,
+                        'max_output_tokens': 10000,
+                        'top_p': 0.95
+                    }
+                )
+                analyse = response.text
+                source = "gemini_ai"
+                
+            except Exception as gemini_error:
+                print(f"❌ Erreur Gemini: {gemini_error}")
+                analyse = f"""📊 **ANALYSE (Mode démo - Gemini erreur)**
+
+{contexte}
+
+**Erreur Gemini:** {str(gemini_error)[:100]}
+
+**Conseils généraux:**
+• Surveillez la santé quotidienne
+• Adaptez l'alimentation à l'âge
+• Maintenez l'hygiène"""
+                source = "demo_error"
+        else:
+            analyse = f"""📊 **ANALYSE DE VOTRE ÉLEVAGE**
+
+{contexte}
+
+**CONSEILS GÉNÉRAUX:**
+1. **Santé:** Vérifiez quotidiennement l'état des volailles
+2. **Alimentation:** Adaptez la ration selon l'âge (starter, croissance, finition)
+3. **Hygiène:** Nettoyez régulièrement les abreuvoirs et mangeoires
+4. **Température:** Maintenez 20-25°C pour les adultes, 32-35°C pour les poussins
+
+**PROCHAINE ÉTAPE:** 
+Configurez Gemini API dans le fichier .env pour une analyse IA avancée."""
+            source = "demo"
+        
+        return jsonify({
+            'analyse': analyse,
+            'statistiques': stats,
+            'source': source,
+            'timestamp': datetime.now().isoformat(),
+            'route_utilisee': request.path
+        })
+        
+    except Exception as e:
+        print(f"❌ Erreur globale: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
+
+# Route ask simplifiée
+@chatbot_bp.route('/ask', methods=['POST', 'OPTIONS'])
 def ask_question():
     if 'eleveur_id' not in session:
         return jsonify({'error': 'Non connecté'}), 401
     
     try:
         data = request.get_json()
-        message = data.get('message', '').strip()
+        message = (data.get('message') or '').strip()
+        mode = (data.get('mode') or 'data').lower()
         
         if not message:
             return jsonify({'error': 'Message vide'}), 400
         
-        # Récupérer les données de l'éleveur
-        donnees_eleveur = get_donnees_eleveur(session['eleveur_id'])
+        # Initialiser Gemini
+        global gemini_model
+        if gemini_model is None:
+            init_gemini()
         
-        # Analyser la question
-        if 'erreur' in donnees_eleveur:
-            reponse = f"❌ Erreur lors de la récupération des données : {donnees_eleveur['erreur']}"
+        if gemini_model:
+            try:
+                prompt = f"""Assistant avicole - Question: {message}
+                
+Réponds en français avec des conseils pratiques et utiles."""
+                
+                response = gemini_model.generate_content(
+                    prompt,
+                    generation_config={
+                        'temperature': 0.7,
+                        'max_output_tokens': 10000
+                    }
+                )
+                reponse = response.text
+            except Exception as e:
+                reponse = f"Réponse (mode démo): {message}\n\nPour des réponses IA, vérifiez la configuration Gemini."
         else:
-            reponse = analyser_question_manuelle(message, donnees_eleveur)
+            reponse = f"Mode: {mode}\nQuestion: {message}\n\n(Assistant en mode démo - Gemini non configuré)"
         
-        # Sauvegarder dans l'historique
+        # Sauvegarder
         message_chat = MessageChatbot(
             eleveur_id=session['eleveur_id'],
             message_utilisateur=message,
-            reponse_bot=reponse
+            reponse_bot=reponse,
+            mode_utilise=mode
         )
         db.session.add(message_chat)
         db.session.commit()
         
-        return jsonify({'reponse': reponse})
+        return jsonify({
+            'reponse': reponse,
+            'mode': mode
+        })
         
     except Exception as e:
-        return jsonify({'error': f'Erreur chatbot: {str(e)}'}), 500
+        current_app.logger.error(f"Erreur /ask: {e}")
+        return jsonify({'error': str(e)}), 500
 
+# Routes existantes...
 @chatbot_bp.route('/historique', methods=['GET'])
 def get_historique():
     if 'eleveur_id' not in session:
@@ -209,8 +307,48 @@ def get_historique():
             'id': msg.id,
             'message_utilisateur': msg.message_utilisateur,
             'reponse_bot': msg.reponse_bot,
-            'date_message': msg.date_message.isoformat()
+            'mode_utilise': msg.mode_utilise or 'data',
+            'date_message': msg.date_message.isoformat() if msg.date_message else None
         } for msg in historique])
         
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+@chatbot_bp.route('/statistiques-chatbot', methods=['GET'])
+def get_chatbot_stats():
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    
+    try:
+        total_messages = MessageChatbot.query.filter_by(
+            eleveur_id=session['eleveur_id']
+        ).count()
+        
+        return jsonify({
+            'total_messages': total_messages,
+            'gemini_configure': bool(GEMINI_API_KEY and GEMINI_API_KEY != "votre_cle_api_ici"),
+            'gemini_model_loaded': gemini_model is not None
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+@chatbot_bp.route('/debug', methods=['GET'])
+def debug_info():
+    """Info de débogage"""
+    return jsonify({
+        'status': 'ok',
+        'session': dict(session),
+        'gemini': {
+            'api_key_set': bool(GEMINI_API_KEY),
+            'model_loaded': gemini_model is not None,
+            'available': GEMINI_API_KEY is not None
+        },
+        'routes': [
+            '/chatbot/ask (POST)',
+            '/chatbot/analyse-complete (POST)',
+            '/chatbot/analyse_complete (POST)',
+            '/chatbot/historique (GET)',
+            '/chatbot/statistiques-chatbot (GET)'
+        ]
+    })

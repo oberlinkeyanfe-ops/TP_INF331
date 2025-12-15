@@ -842,10 +842,53 @@
         <section v-if="activeTab === 'chatbot'" class="tab-panel chatbot-panel">
           <h2>Chatbot</h2>
           <div class="chatbox">
+            <div class="chat-controls">
+              <div class="chat-mode-head">
+                <label>Mode IA</label>
+                <span class="chat-mode-hint">Choisissez la source d'information</span>
+              </div>
+              <div class="chat-mode-pills">
+                <button
+                  type="button"
+                  class="pill-btn"
+                  :class="{ active: chatMode === 'data' }"
+                  @click="chatMode = 'data'"
+                >
+                  Données internes
+                </button>
+                <button
+                  type="button"
+                  class="pill-btn"
+                  :class="{ active: chatMode === 'hybrid' }"
+                  @click="chatMode = 'hybrid'"
+                >
+                  Hybride
+                </button>
+                <button
+                  type="button"
+                  class="pill-btn"
+                  :class="{ active: chatMode === 'web' }"
+                  @click="chatMode = 'web'"
+                >
+                  Web uniquement
+                </button>
+                
+                  <button 
+                    @click="analyserElevage"
+                    class="pill-btn"
+                    :disabled="chatLoading"
+                  >
+                    📊 Analyser mon élevage
+                  </button>
+                
+              </div>
+            </div>
             <div class="messages">
               <div v-for="(m, i) in messages" :key="i" :class="['msg', m.from]">
-                {{ m.text }}
+                <span class="msg-text">{{ m.text }}</span>
+                <button class="msg-close" aria-label="Fermer" @click="dismissChatMessage(i)">✕</button>
               </div>
+              <div v-if="chatLoading" class="msg bot">…</div>
             </div>
             <form @submit.prevent="sendMessage" class="chat-form">
               <input
@@ -1559,6 +1602,7 @@
               <span class="msg-icon">⚠️</span>
               Critiques
               <span class="badge" v-if="messageBuckets.critical.length">{{ messageBuckets.critical.length }}</span>
+              <span class="tab-close" @click.stop="dismissMessageBucket('critical')">✕</span>
             </button>
             <button
               v-if="messageBuckets.problem.length"
@@ -1569,6 +1613,7 @@
               <span class="msg-icon">❗</span>
               Problèmes
               <span class="badge" v-if="messageBuckets.problem.length">{{ messageBuckets.problem.length }}</span>
+              <span class="tab-close" @click.stop="dismissMessageBucket('problem')">✕</span>
             </button>
             <button
               v-if="messageBuckets.good.length"
@@ -1579,6 +1624,7 @@
               <span class="msg-icon">✅</span>
               Bonnes nouvelles
               <span class="badge" v-if="messageBuckets.good.length">{{ messageBuckets.good.length }}</span>
+              <span class="tab-close" @click.stop="dismissMessageBucket('good')">✕</span>
             </button>
           </div>
 
@@ -1733,6 +1779,8 @@ export default {
         { from: 'bot', text: 'Bonjour ! Comment puis-je vous aider avec votre bande avicole ?' }
       ],
       chatInput: "",
+      chatMode: 'data',
+      chatLoading: false,
       
       // Prediction data
       predictionDays: '7',
@@ -2956,6 +3004,16 @@ export default {
       this.$nextTick(() => this.ensureActiveMessageTab());
     },
 
+    dismissMessageBucket(tab) {
+      const bucket = this.messageBuckets[tab] || [];
+      bucket.forEach(m => {
+        if (m.id && !this.dismissedMessageIds.includes(m.id)) {
+          this.dismissedMessageIds.push(m.id);
+        }
+      });
+      this.$nextTick(() => this.ensureActiveMessageTab());
+    },
+
     ensureActiveMessageTab() {
       const counts = this.messageCounts;
       if (counts[this.activeMessageTab] > 0) {
@@ -3963,6 +4021,7 @@ export default {
       this.consumptionFormCostPreview = 0;
     },
 
+
     async deleteConsumption(cons) {
       const confirmDelete = confirm('Supprimer cette consommation ?');
       if (!confirmDelete) return;
@@ -3991,26 +4050,99 @@ export default {
       }
     },
 
-    async sendMessage() {
-      if (!this.chatInput.trim()) return;
-      
-      const userMessage = this.chatInput;
-      this.messages.push({ from: "user", text: userMessage });
-      this.chatInput = "";
-      
-      try {
-        setTimeout(() => {
-          const responses = [
-            `Pour la bande "${this.band?.nom_bande || ''}", que souhaitez-vous savoir ?`,
-            "Je peux vous aider à analyser les performances de votre bande.",
-            "Consultez les prédictions pour voir les tendances futures."
-          ];
-          const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-          this.messages.push({ from: "bot", text: randomResponse });
-        }, 1000);
-      } catch (e) {
-        this.messages.push({ from: "bot", text: "Erreur de connexion" });
+   // Méthode pour analyser l'élevage
+async analyserElevage() {
+  try {
+    this.chatLoading = true;
+    
+    // Appel direct avec gestion d'erreur
+    const response = await fetch('http://localhost:5000/chatbot/analyse_complete', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      // Si c'est une erreur 404, le endpoint n'existe pas
+      if (response.status === 404) {
+        throw new Error('Le service d\'analyse n\'est pas disponible. Vérifiez le serveur.');
       }
+      throw new Error(`Erreur ${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // Afficher la réponse
+    this.messages.push({
+      from: 'bot',
+      text: data.analyse || 'Analyse non disponible'
+    });
+    
+  } catch (error) {
+    console.error('Erreur analyse:', error);
+    this.messages.push({
+      from: 'bot',
+      text: `⚠️ Erreur: ${error.message}`
+    });
+  } finally {
+    this.chatLoading = false;
+  }
+},
+
+// Méthode pour envoyer un message
+async sendMessage() {
+  if (!this.chatInput.trim()) return;
+  
+  const message = this.chatInput.trim();
+  this.messages.push({ from: 'user', text: message });
+  this.chatInput = '';
+  this.chatLoading = true;
+  
+  try {
+    const response = await fetch('http://localhost:5000/chatbot/ask', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        message: message,
+        mode: this.chatMode
+      })
+    });
+    
+    const data = await response.json();
+    
+    if (data.error) {
+      throw new Error(data.error);
+    }
+    
+    this.messages.push({ 
+      from: 'bot', 
+      text: data.reponse
+    });
+    
+  } catch (error) {
+    console.error('Erreur chatbot:', error);
+    this.messages.push({ 
+      from: 'bot', 
+      text: `Erreur: ${error.message}` 
+    });
+  } finally {
+    this.chatLoading = false;
+  }
+},
+
+    dismissChatMessage(index) {
+      if (index == null) return;
+      this.messages.splice(index, 1);
+    },
+
+    dismissChatMessage(index) {
+      if (index < 0 || index >= this.messages.length) return;
+      this.messages.splice(index, 1);
     },
 
     selectTab(tab) {
