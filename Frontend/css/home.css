@@ -1,6 +1,8 @@
 /* --- Couleurs et polices de base --- */
 :root {
     --color-dark-blue: #1E3A8A; /* Bleu foncé pour l'en-tête principal */
+    --header-height: 90px;
+    --font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, -apple-system, sans-serif;
     --color-medium-blue: #2563EB; /* Bleu légèrement plus clair pour les accents */
     --color-text-light: #F9FAFB; /* Texte clair sur fond foncé */
     --color-text-dark: #374151; /* Texte foncé par défaut */
@@ -10,12 +12,21 @@
     --color-link-active: #BFDBFE; /* Couleur pour l'onglet actif */
 }
 
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
 body {
-    font-family: Arial, sans-serif;
+    font-family: var(--font-family);
     margin: 0;
     padding: 0;
     background-color: var(--color-background-light);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
 }
+
+html { font-size: 16px; }
+h1,h2,h3,h4,h5,h6 { font-family: var(--font-family); font-weight: 600; margin: 0 0 0.5rem; }
+button, .btn-primary, .btn-secondary { font-weight: 600; }
 
 /* --- Structure Principale (Home.vue) --- */
 
@@ -41,6 +52,8 @@ body {
     top: 0;
     z-index: 1000;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    height: var(--header-height);
+    min-height: var(--header-height);
 }
 
 .page-header .brand {

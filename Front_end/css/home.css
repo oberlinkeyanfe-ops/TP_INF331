@@ -1,7 +1,10 @@
 /* =========================================
    1. VARIABLES & RESET
    ========================================= */
+/* placeholder to keep CSS lint happy */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 :root {
+  --font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, -apple-system, sans-serif;
   /* Palette de couleurs "Avipro" */
   --primary: #0f172a;       /* Bleu nuit profond (Autorité/Tech) */
   --primary-light: #334155;
@@ -21,6 +24,11 @@
   
   --radius: 12px;
   --header-height: 90px; /* MODIFIÉ : Hauteur augmentée pour le grand logo */
+  --border-color: #cbd5e1;
+  --primary-accent: var(--accent);
+  --text-dark: var(--text-main);
+  --shadow-card: var(--shadow-md);
+  --border-radius-card: 12px;
 }
 
 * {
@@ -30,12 +38,21 @@
 }
 
 body {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif; /* Police moderne */
+  font-family: var(--font-family);
   background-color: var(--bg-body);
   color: var(--text-main);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
 }
+
+html { font-size: 16px; }
+
+/* Typography defaults */
+h1,h2,h3,h4,h5,h6 { font-family: var(--font-family); font-weight: 600; color: var(--primary); margin: 0 0 0.5rem; }
+body, p, label, input, button { font-weight: 400; }
+button, .btn-primary, .btn-secondary { font-weight: 600; }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, 'Roboto Mono', monospace; }
+* { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; text-rendering: optimizeLegibility; }
 
 button {
   font-family: inherit;
@@ -51,16 +68,19 @@ button {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  min-width: 230vh;
 }
 
 .main-container {
   flex: 1;
   width: 100%;
   max-width: 1280px;
-  margin-top: 100vh;
   padding: 2rem 1.5rem;
 }
 
+.home-tab{
+  margin-top: 100vh;
+}
 /* Animations de transition entre onglets */
 .tab-fade {
   animation: fadeIn 0.4s ease-out;
@@ -735,3 +755,54 @@ input:focus, select:focus {
     .footer-brand { justify-content: center; }
     
 }
+
+/* Chatbot styles (extracted from band.css, adapted) */
+.chatbox {
+  display: flex;
+  flex-direction: column;
+  height: 500px;
+}
+.chat-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.chat-mode-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.chat-mode-head label { font-weight: 700; color: var(--text-dark); }
+.chat-mode-hint { font-size: 12px; color: var(--text-muted); }
+.chat-mode-pills { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.pill-btn {
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border-color);
+  background: white;
+  color: var(--text-dark);
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+.pill-btn:hover { border-color: var(--primary-accent); color: var(--primary-accent); box-shadow: 0 6px 20px rgba(0,0,0,0.06); }
+.pill-btn.active { background: var(--primary-accent); color: white; border-color: var(--primary-accent); box-shadow: 0 8px 26px rgba(111,66,193,0.35); }
+.messages {
+  flex-grow: 1;
+  overflow-y: auto;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: var(--border-radius-card);
+  margin-bottom: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.msg { padding: 10px 15px; border-radius: 20px; max-width: 70%; position: relative; }
+.msg-text { display: inline-block; }
+.msg-close { position: absolute; top: 6px; right: 10px; border: none; background: transparent; color: inherit; opacity: 0.5; cursor: pointer; }
+.msg-close:hover { opacity: 1; }
+.msg.user { align-self: flex-end; background-color: var(--primary-accent); color: white; border-bottom-right-radius: 5px; }
+.msg.bot { align-self: flex-start; background-color: white; box-shadow: var(--shadow-card); color: var(--text-dark); border-bottom-left-radius: 5px; }
+.chat-form { display: flex; gap: 10px; }
+.chat-form input { flex-grow: 1; padding: 12px 20px; border: 1px solid var(--border-color); border-radius: 30px; }

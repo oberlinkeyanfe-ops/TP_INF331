@@ -12,6 +12,7 @@
           <button @click="selectTab('home')" :class="{ active: activeTab === 'home' }">Accueil</button>
           <button @click="selectTab('bands')" :class="{ active: activeTab === 'bands' }">Mes Bandes</button>
           <button @click="selectTab('dashboard')" :class="{ active: activeTab === 'dashboard' }">Tableau de bord</button>
+          <button class="ai" :class="{ active: activeTab === 'chatbot' }" @click="selectTab('chatbot')"></button>
         </nav>
 
         <div class="nav-profile">
@@ -28,13 +29,42 @@
               <router-link to="/signout" class="dd-item text-red">Déconnexion</router-link>
             </div>
           </div>
+
+            <section v-if="activeTab === 'chatbot'" class="tab-fade chatbot-tab">
+              <h2>Chatbot</h2>
+              <div class="chatbox">
+                <div class="chat-controls">
+                  <div class="chat-mode-head">
+                    <label>Mode IA</label>
+                    <span class="chat-mode-hint">Choisissez la source d'information</span>
+                  </div>
+                  <div class="chat-mode-pills">
+                    <button type="button" class="pill-btn" :class="{ active: chatMode === 'data' }" @click="chatMode = 'data'">Données internes</button>
+                    <button type="button" class="pill-btn" :class="{ active: chatMode === 'hybrid' }" @click="chatMode = 'hybrid'">Hybride</button>
+                    <button type="button" class="pill-btn" :class="{ active: chatMode === 'web' }" @click="chatMode = 'web'">Web uniquement</button>
+                    <button @click="analyserElevage" class="pill-btn" :disabled="chatLoading">📊 Analyser mon élevage</button>
+                  </div>
+                </div>
+                <div class="messages">
+                  <div v-for="(m, i) in messages" :key="i" :class="['msg', m.from]">
+                    <span class="msg-text">{{ m.text }}</span>
+                    <button class="msg-close" aria-label="Fermer" @click="dismissChatMessage(i)">✕</button>
+                  </div>
+                  <div v-if="chatLoading" class="msg bot">…</div>
+                </div>
+                <form @submit.prevent="sendMessage" class="chat-form">
+                  <input v-model="chatInput" placeholder="Poser une question à l'IA" />
+                  <button class="btn" type="submit">Envoyer</button>
+                </form>
+              </div>
+            </section>
         </div>
       </div>
     </header>
 
     <main class="main-container">
       
-      <div v-if="activeTab === 'home'" class="tab-fade">
+      <div v-if="activeTab === 'home'" class="tab-fade home-tab">
         
         <section class="hero-grid">
           <div class="hero-content">
@@ -109,7 +139,7 @@
         </section>
       </div>
 
-      <div v-if="activeTab === 'bands'" class="tab-fade">
+      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab">
         <header class="page-header">
           <div>
             <h2>Mes Bandes</h2>
@@ -194,6 +224,7 @@
 import img1 from '../assets/slide/slide1.png';
 import img2 from '../assets/slide/slide2.png';
 import img3 from '../assets/slide/slide3.png';
+import * as chatbotMethods from './methods/chatbotMethods.js';
 
 export default {
   name: 'Home',
@@ -214,7 +245,12 @@ export default {
         { title: 'Rentabilité', text: 'Calculez vos marges en temps réel.', image: img3 }
       ],
       currentSlide: 0,
-      slideTimer: null
+      slideTimer: null,
+      // Chatbot state
+      chatInput: '',
+      messages: [],
+      chatMode: 'data',
+      chatLoading: false
     };
   },
   computed: {
@@ -324,6 +360,11 @@ export default {
       for (let i = 0; i < 6; i++) color += letters[Math.floor(Math.random() * 16)];
       this.avatarColor = color;
     }
+    ,
+    // Chatbot helpers
+    async analyserElevage() { return await chatbotMethods.analyserElevage(this); },
+    async sendMessage() { return await chatbotMethods.sendMessage(this); },
+    dismissChatMessage(i) { this.messages.splice(i, 1); }
   },
   mounted() {
     this.loadUser();

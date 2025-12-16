@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, session
+﻿from flask import Blueprint, request, jsonify, session
 from modeles.models import db, Consommation, Bande
 from datetime import datetime
 import traceback
@@ -94,14 +94,30 @@ def create_consommation():
                 if semaine_prod > duree_semaines:
                     return jsonify({'error': "La consommation dépasse la durée prévue de la bande"}), 400
 
-        # Interdire plusieurs consommations la même semaine
+        # Interdire plusieurs consommations la même semaine, sauf si l'existante est un placeholder auto-généré
         if semaine_prod is not None:
             existing = Consommation.query.filter_by(
                 bande_id=bande_id,
                 semaine_production=semaine_prod
             ).first()
             if existing:
-                return jsonify({'error': f'Une consommation existe déjà pour la semaine {semaine_prod}. Supprimez-la ou modifiez-la avant d\'ajouter.'}), 400
+                try:
+                    type_existing = (existing.type_aliment or '').lower()
+                except Exception:
+                    type_existing = ''
+                if type_existing.startswith('auto'):
+                    # Remplacer l'enregistrement auto par la vraie saisie
+                    existing.date = date_obj
+                    existing.type_aliment = str(data['type_aliment']).strip()
+                    existing.cout_aliment = cout_aliment
+                    existing.aliment_kg = aliment_kg
+                    existing.eau_litres = eau_litres
+                    existing.semaine_production = semaine_prod
+                    db.session.add(existing)
+                    db.session.commit()
+                    return jsonify(existing.to_dict()), 200
+                else:
+                    return jsonify({'error': f'Une consommation existe déjà pour la semaine {semaine_prod}. Supprimez-la ou modifiez-la avant d\'ajouter.'}), 400
         
         # Créer la consommation
         consommation = Consommation(
@@ -247,6 +263,15 @@ def delete_consommation(cons_id):
         bande = cons.bande
         if not bande or bande.eleveur_id != session.get('eleveur_id', 1):
             return jsonify({'error': 'Accès refusé'}), 403
+        # Empêcher la suppression si des consommations de semaines supérieures existent
+        if cons.semaine_production is not None:
+            higher = Consommation.query.filter(
+                Consommation.bande_id == bande.id,
+                Consommation.semaine_production > cons.semaine_production
+            ).first()
+            if higher:
+                return jsonify({'error': "Supprimez d'abord les consommations des semaines supérieures avant de supprimer celle-ci."}), 400
+
         db.session.delete(cons)
         db.session.commit()
         return jsonify({'success': True})

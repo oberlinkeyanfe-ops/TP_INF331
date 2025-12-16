@@ -1,7 +1,7 @@
-// Fonctions liées à l'onglet Consommation
+﻿// Fonctions liées à l'onglet Consommation
 
 export function formatDate(dateString) {
-  if (!dateString) return '—';
+  if (!dateString) return '';
   const date = new Date(dateString);
   return date.toLocaleDateString('fr-FR');
 }
@@ -75,6 +75,15 @@ export function resetConsumptionForm(vm) {
 }
 
 export async function deleteConsumption(vm, cons) {
+  // Frontend safeguard: empêcher suppression si des semaines supérieures existent
+  if (cons.semaine_production != null) {
+    const hasHigher = vm.consommations.some(c => Number(c.semaine_production) > Number(cons.semaine_production));
+    if (hasHigher) {
+      alert(" Supprimez d'abord les consommations des semaines supérieures avant de supprimer celle-ci.");
+      return;
+    }
+  }
+
   const confirmDelete = confirm('Supprimer cette consommation ?');
   if (!confirmDelete) return;
   try {
@@ -84,61 +93,68 @@ export async function deleteConsumption(vm, cons) {
       if (vm.editingConsumptionId === cons.id) vm.resetConsumptionForm();
       vm.updateTrendsFromData();
       vm.calculateKPI();
-      alert('🗑️ Consommation supprimée');
+      alert(' Consommation supprimée');
     } else {
       const err = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-      alert(`❌ Erreur : ${err.error || response.statusText}`);
+      alert(` Erreur : ${err.error || response.statusText}`);
     }
   } catch (error) {
-    console.error('💥 Erreur suppression:', error);
-    alert('🌐 Erreur de connexion au serveur');
+    console.error(' Erreur suppression:', error);
+    alert(' Erreur de connexion au serveur');
   }
 }
 
 export async function addConsumption(vm) {
   try {
-    if (!vm.id) { alert("⚠️ Veuillez sélectionner une bande d'abord"); return; }
+    if (!vm.id) { alert(" Veuillez sélectionner une bande d'abord"); return; }
 
     const durationWeeks = vm.durationWeeks;
     const isEditing = !!vm.editingConsumptionId;
 
-    if (!vm.consumptionForm.semaine_production) { alert('❌ Sélectionnez une semaine'); return; }
-    if (!vm.consumptionForm.type || vm.consumptionForm.type.trim() === '') { alert("❌ Le type d'aliment est obligatoire"); return; }
+    if (!vm.consumptionForm.semaine_production) { alert(' Sélectionnez une semaine'); return; }
+    if (!vm.consumptionForm.type || vm.consumptionForm.type.trim() === '') { alert(" Le type d'aliment est obligatoire"); return; }
 
     const kgValue = parseFloat(vm.consumptionForm.kg);
-    if (!vm.consumptionForm.kg || isNaN(kgValue) || kgValue <= 0) { alert("❌ La quantité (kg) doit être un nombre supérieur à 0"); return; }
+    if (!vm.consumptionForm.kg || isNaN(kgValue) || kgValue <= 0) { alert(" La quantité (kg) doit être un nombre supérieur à 0"); return; }
 
     const weekNumber = parseInt(vm.consumptionForm.semaine_production, 10);
-    if (weekNumber > durationWeeks) { alert(`❌ La semaine ${weekNumber} dépasse la durée prévue (${durationWeeks} sem.)`); return; }
+    if (weekNumber > durationWeeks) { alert(` La semaine ${weekNumber} dépasse la durée prévue (${durationWeeks} sem.)`); return; }
 
-    const existingWeek = vm.consommations.find(c => c.semaine_production === weekNumber && c.id !== vm.editingConsumptionId);
-    if (existingWeek) { alert(`❌ Une consommation existe déjà pour la semaine ${weekNumber}.`); return; }
-
-    // Auto-fill previous empty weeks with zero entries
-    for (let w = 1; w < weekNumber; w++) {
-      const hasWeek = vm.consommations.some(c => c.semaine_production === w);
-      if (!hasWeek) {
-        const zeroPayload = { bande_id: parseInt(vm.id), date: vm.getDateForWeek(w), type_aliment: 'Auto 0', aliment_kg: 0, cout_aliment: 0, eau_litres: 0, prix_unitaire: 0, prix_eau_unitaire: 25, semaine_production: w, poids_moyen_actuel: null };
-        try {
-          const zeroResponse = await fetch('http://localhost:5000/consommations/', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, credentials: 'include', body: JSON.stringify(zeroPayload) });
-          if (zeroResponse.ok) {
-            const zr = await zeroResponse.json();
-            vm.consommations.push({ id: zr.id, date: zr.date, type: zr.type_aliment, kg: zr.aliment_kg, cout: (zr.cout_aliment || 0) + (zr.prix_eau_unitaire || 0) * (zr.eau_litres || 0), eau_litres: zr.eau_litres || 0, prix_unitaire: zr.prix_unitaire || 0, prix_eau_unitaire: zr.prix_eau_unitaire || 25, bande_id: zr.bande_id, semaine_production: zr.semaine_production || w });
-          } else {
-            vm.consommations.push({ id: `tmp-${Date.now()}-${w}`, date: zeroPayload.date, type: 'Auto 0', kg: 0, cout: 0, bande_id: vm.id, eau_litres: 0, prix_unitaire: 0, prix_eau_unitaire: 25, semaine_production: w });
-          }
-        } catch (err) {
-          vm.consommations.push({ id: `tmp-${Date.now()}-${w}`, date: zeroPayload.date, type: 'Auto 0', kg: 0, cout: 0, bande_id: vm.id, eau_litres: 0, prix_unitaire: 0, prix_eau_unitaire: 25, semaine_production: w });
-        }
-      }
-    }
+    // ensure numeric comparison for semaine_production to avoid type mismatches
+    const existingWeek = vm.consommations.find(c => Number(c.semaine_production) === Number(weekNumber) && c.id !== vm.editingConsumptionId);
+    if (existingWeek) { alert(` Une consommation existe déjà pour la semaine ${weekNumber}.`); return; }
 
     const prixUnitaire = parseFloat(vm.consumptionForm.prix_unitaire || 0) || 0;
     const prixEau = parseFloat(vm.consumptionForm.prix_eau_unitaire || 0) || 0;
     let coutTotal = parseFloat(vm.consumptionForm.cout || 0) || 0;
     if (!coutTotal) coutTotal = +(prixUnitaire * kgValue + prixEau * parseFloat(vm.consumptionForm.eau_litres || 0)).toFixed(2);
 
-    const payload = { bande_id: parseInt(vm.id), date: vm.consumptionForm.date || vm.getDateForWeek(weekNumber), type_aliment: vm.consumptionForm.type.trim(), aliment_kg: kgValue, cout_aliment: coutTotal, eau_litres: parseFloat(vm.consumptionForm.eau_litres || 0), prix_unitaire: prixUnitaire || null, prix_eau_unitaire: prixEau || 25, semaine_production: weekNumber, poids_moyen_actuel: null };
+    // Force payload date to the canonical date for the selected week to keep backend week calculation consistent
+    const payloadDate = vm.getDateForWeek(weekNumber);
+
+    // Auto-create missing prior weeks as zero placeholders (type starting with 'Auto') so UX shows them as yellow warnings.
+    // Backend will accept and allow these placeholders to be replaced later when the user inputs a real consumption for that week.
+    if (!isEditing) {
+      for (let w = 1; w < weekNumber; w++) {
+        const missing = !vm.consommations.some(c => Number(c.semaine_production) === Number(w));
+        if (missing) {
+          const placeholderPayload = { bande_id: parseInt(vm.id), date: vm.getDateForWeek(w), type_aliment: 'Auto 0 - placeholder', aliment_kg: 0, cout_aliment: 0, eau_litres: 0, prix_unitaire: null, prix_eau_unitaire: 25, semaine_production: w };
+          try {
+            const resp = await fetch('http://localhost:5000/consommations/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'include', body: JSON.stringify(placeholderPayload) });
+            if (resp.ok) {
+              const pd = await resp.json().catch(() => null);
+              if (pd && pd.id) {
+                vm.consommations.push({ id: pd.id, date: pd.date, type: pd.type_aliment || 'Auto', kg: pd.aliment_kg || 0, cout: pd.cout_aliment || 0, bande_id: pd.bande_id, semaine_production: pd.semaine_production });
+              }
+            }
+          } catch (e) {
+            console.warn('Échec création placeholder semaine', w, e);
+          }
+        }
+      }
+    }
+
+    const payload = { bande_id: parseInt(vm.id), date: payloadDate, type_aliment: vm.consumptionForm.type.trim(), aliment_kg: kgValue, cout_aliment: coutTotal, eau_litres: parseFloat(vm.consumptionForm.eau_litres || 0), prix_unitaire: prixUnitaire || null, prix_eau_unitaire: prixEau || 25, semaine_production: weekNumber, poids_moyen_actuel: null };
 
     const url = isEditing ? `http://localhost:5000/consommations/${vm.editingConsumptionId}` : 'http://localhost:5000/consommations/';
     const method = isEditing ? 'PUT' : 'POST';
@@ -148,19 +164,19 @@ export async function addConsumption(vm) {
 
     if (response.ok) {
       const updated = { id: responseData.id, date: responseData.date, type: responseData.type_aliment, kg: responseData.aliment_kg, eau_litres: responseData.eau_litres || payload.eau_litres, prix_unitaire: responseData.prix_unitaire || payload.prix_unitaire || 0, prix_eau_unitaire: responseData.prix_eau_unitaire || payload.prix_eau_unitaire || 25, cout: (responseData.cout_aliment || payload.cout_aliment || 0) + (responseData.prix_eau_unitaire || payload.prix_eau_unitaire || 0) * (responseData.eau_litres || payload.eau_litres || 0), bande_id: responseData.bande_id, semaine_production: responseData.semaine_production || weekNumber };
-      if (isEditing) { const idx = vm.consommations.findIndex(c => c.id === vm.editingConsumptionId); if (idx !== -1) vm.consommations.splice(idx, 1, updated); alert('✅ Consommation mise à jour'); } else { vm.consommations.unshift(updated); alert('✅ Consommation ajoutée avec succès !'); }
+      if (isEditing) { const idx = vm.consommations.findIndex(c => c.id === vm.editingConsumptionId); if (idx !== -1) vm.consommations.splice(idx, 1, updated); alert(' Consommation mise à jour'); } else { vm.consommations.unshift(updated); alert(' Consommation ajoutée avec succès !'); }
       vm.resetConsumptionForm();
       vm.filledWeeks = vm.getFilledWeeksMap();
       vm.updateTrendsFromData();
       vm.calculateKPI();
     } else {
       const errorMsg = responseData.error || `Erreur ${response.status}`;
-      console.error('❌ Erreur détaillée:', { status: response.status, error: errorMsg, payload });
-      alert(`❌ Erreur : ${errorMsg}`);
+      console.error(' Erreur détaillée:', { status: response.status, error: errorMsg, payload });
+      alert(` Erreur : ${errorMsg}`);
     }
 
   } catch (error) {
-    console.error('💥 Erreur complète:', error);
-    if (error.name === 'TypeError' && error.message.includes('fetch')) alert('🌐 Erreur de connexion au serveur'); else alert(`💥 Erreur : ${error.message}`);
+    console.error(' Erreur complète:', error);
+    if (error.name === 'TypeError' && error.message.includes('fetch')) alert(' Erreur de connexion au serveur'); else alert(` Erreur : ${error.message}`);
   }
 }
