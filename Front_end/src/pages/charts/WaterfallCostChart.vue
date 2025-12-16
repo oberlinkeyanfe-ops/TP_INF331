@@ -17,7 +17,11 @@ export default {
   components: { ChartBase },
   props: {
     consommations: { type: Array, default: () => [] },
-    band: { type: Object, default: () => ({}) }
+    band: { type: Object, default: () => ({}) },
+    predictions: { type: Array, default: null },
+    optimalPrediction: { type: Object, default: null },
+    mode: { type: String, default: 'dashboard' }, // 'dashboard' | 'predictions'
+    revenueCurrent: { type: Number, default: null }
   },
   data() {
     return {
@@ -79,9 +83,91 @@ export default {
     },
 
     buildSeries() {
+      // If an optimal prediction is provided, show a single-step waterfall:
+      // Revenu total -> Coûts par poste (négatifs) -> Marge nette
+      // If mode is 'predictions' and an optimal prediction is provided, use predicted revenue
+      if (this.mode === 'predictions' && this.optimalPrediction) {
+        const opt = this.optimalPrediction || {};
+        const revenue = Number(opt.valeur || 0);
+        const predictedConsumptionCost = Number(opt.cout || 0);
+        const treatmentCosts = Number(this.$parent?.totalTreatmentCost ?? this.$parent?.totalTreatmentCost ?? 0) || 0;
+        const elementaryExpenses = Number(this.$parent?.totalExpensesElementaires ?? 0) || 0;
+
+        const costs = [
+          { key: 'consommation', label: 'Consommations', value: -predictedConsumptionCost },
+          { key: 'traitements', label: 'Traitements', value: -treatmentCosts },
+          { key: 'depenses', label: 'Dépenses élémentaires', value: -elementaryExpenses }
+        ];
+
+        const labels = ['Revenu total', ...costs.map(c => c.label), 'Marge nette'];
+        const base = [];
+        const delta = [];
+        let cumul = 0;
+
+        // Revenu
+        base.push(0);
+        delta.push(Math.round(revenue));
+        cumul += revenue;
+
+        // Costs as negative steps
+        for (const c of costs) {
+          base.push(Math.round(cumul));
+          const step = Math.round(c.value || 0);
+          delta.push(step);
+          cumul += step;
+        }
+
+        // Final net margin (should equal cumul)
+        base.push(Math.round(cumul - (Math.round(cumul) || 0)) );
+        // push null for base and push value representing final margin as 0 to show final point via base+delta
+        delta.push(0);
+
+        return { labels, base, delta };
+      }
+
+      // If mode is 'dashboard', use provided current revenue (observed cumulative revenue)
+      if (this.mode === 'dashboard' && (this.revenueCurrent !== null && this.revenueCurrent !== undefined)) {
+        const revenue = Number(this.revenueCurrent || 0);
+        const treatmentCosts = Number(this.$parent?.totalTreatmentCost ?? 0) || 0;
+        const elementaryExpenses = Number(this.$parent?.totalExpensesElementaires ?? 0) || 0;
+
+        // consumption costs come from observed weeklyCost (sum)
+        const observedConsumptionTotal = (this.consommations || []).reduce((s, c) => s + (Math.round((Number(c.kg || 0) * Number(c.prix_unitaire || 0) + Number(c.eau_litres || 0) * Number(c.prix_eau_unitaire || 0))) || 0), 0);
+
+        const costs = [
+          { key: 'consommation', label: 'Consommations', value: -observedConsumptionTotal },
+          { key: 'traitements', label: 'Traitements', value: -treatmentCosts },
+          { key: 'depenses', label: 'Dépenses élémentaires', value: -elementaryExpenses }
+        ];
+
+        const labels = ['Revenu total', ...costs.map(c => c.label), 'Marge nette'];
+        const base = [];
+        const delta = [];
+        let cumul = 0;
+
+        // Revenu
+        base.push(0);
+        delta.push(Math.round(revenue));
+        cumul += revenue;
+
+        // Costs as negative steps
+        for (const c of costs) {
+          base.push(Math.round(cumul));
+          const step = Math.round(c.value || 0);
+          delta.push(step);
+          cumul += step;
+        }
+
+        base.push(Math.round(cumul - (Math.round(cumul) || 0)) );
+        delta.push(0);
+
+        return { labels, base, delta };
+      }
+
       const durationWeeks = Math.max(1, Math.ceil((parseInt(this.band?.duree_jours, 10) || 42) / 7));
       const labels = Array.from({ length: durationWeeks }, (_, i) => `S${i + 1}`);
       const weeklyCost = Array(durationWeeks).fill(null);
+      const weeklyMargin = Array(durationWeeks).fill(null);
 
       (this.consommations || []).forEach(c => {
         const w = c.semaine_production;
@@ -95,14 +181,36 @@ export default {
         weeklyCost[idx] = (weeklyCost[idx] || 0) + total;
       });
 
-      const lastIdx = weeklyCost.reduce((acc, v, i) => (v !== null ? i : acc), -1);
+      // If predictions provided, compute weekly predicted margin (valeur - coût prédit)
+      if (Array.isArray(this.predictions) && this.predictions.length && this.band?.date_arrivee) {
+        const start = new Date(this.band.date_arrivee);
+        start.setHours(0,0,0,0);
+        this.predictions.forEach(p => {
+          if (!p?.date) return;
+          const d = new Date(p.date);
+          if (Number.isNaN(d.getTime())) return;
+          // week index relative to band start
+          const diffDays = Math.floor((d - start) / (1000*60*60*24));
+          const wk = Math.floor(diffDays / 7) + 1;
+          if (wk < 1 || wk > durationWeeks) return;
+          const idx = wk - 1;
+          const marge = Number(p.marge || 0);
+          weeklyMargin[idx] = (weeklyMargin[idx] || 0) + marge;
+        });
+      }
+
+      // determine last index either from costs or margins
+      const lastCostIdx = weeklyCost.reduce((acc, v, i) => (v !== null ? i : acc), -1);
+      const lastMarginIdx = weeklyMargin.reduce((acc, v, i) => (v !== null ? i : acc), -1);
+      const lastIdx = Math.max(lastCostIdx, lastMarginIdx);
       const base = [];
       const delta = [];
       let cumul = 0;
       for (let i = 0; i < weeklyCost.length; i += 1) {
         if (lastIdx >= 0 && i <= lastIdx) {
           base.push(cumul);
-          const step = weeklyCost[i] ?? 0;
+          // prefer showing margin if available, otherwise cost
+          const step = (weeklyMargin[i] !== null && weeklyMargin[i] !== undefined) ? weeklyMargin[i] : (weeklyCost[i] ?? 0);
           delta.push(step);
           cumul += step;
         } else {

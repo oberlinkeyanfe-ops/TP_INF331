@@ -37,7 +37,7 @@
 
         <span class="logo-section">
           <img src="../assets/icons/sante.svg"/>
-          <button :class="{ active: ['traitements','animaux'].includes(activeTab) }" @click="selectTab('traitements')" class="taches">Sante</button>
+          <button :class="{ active: ['sante','traitements','animaux'].includes(activeTab) }" @click="selectTab('sante')" class="taches">Sante</button>
         </span>
 
         <span class="logo-section">
@@ -83,8 +83,10 @@
       </div>
     </nav>
 
-    <div class="main-section">
-      <header class="bande-header">
+      <main class="main-section">
+
+        <!-- Header -->
+        <header class="bande-header">
         <div class="header-main">
           <div class="header-title">
             <p class="header-kicker">Tableau de bord</p>
@@ -129,25 +131,6 @@
             @click="selectTab('chatbot')"></button>
         </div>
       </header>
-
-      <main class="bande-main">
-        <div
-          v-if="['traitements', 'animaux'].includes(activeTab)"
-          class="health-subtabs"
-        >
-          <button
-            :class="['health-subtab', { active: activeTab === 'traitements' }]"
-            @click="selectTab('traitements')"
-          >
-            Traitements
-          </button>
-          <button
-            :class="['health-subtab', { active: activeTab === 'animaux' }]"
-            @click="selectTab('animaux')"
-          >
-            Animaux
-          </button>
-        </div>
 
         <!-- Dashboard Tab -->
         <section
@@ -297,7 +280,7 @@
                   <h3>Waterfall</h3>
                 </div>
               </div>
-              <WaterfallCostChart :consommations="consommations" :band="band" />
+              <WaterfallCostChart :consommations="consommations" :band="band" :predictions="predictions" :optimalPrediction="optimalPrediction" :mode="'dashboard'" :revenueCurrent="gainsComputed.cumActual" />
             </div>
 
             <div class="dash-card span-1 compact">
@@ -1030,243 +1013,265 @@
           </div>
         </section>
 
+        
+
         <!-- Animaux Tab -->
-        <section v-if="activeTab === 'animaux'" class="tab-panel animaux-panel">
+        <section v-if="activeTab === 'sante' && santeSubTab === 'animaux'" class="tab-panel animaux-panel">
+          <!-- Sante subtab controls -->
+        <div v-if="activeTab === 'sante'" class="sante-subtabs" style="margin-top: 16px; gap: 10px; margin-left: 20px;">
+          <button  :class="['finance-subtab', { active: santeSubTab === 'animaux' }]" @click="santeSubTab = 'animaux'">Animaux</button>
+          <button :class="['finance-subtab', { active: santeSubTab === 'traitements' }]" @click="santeSubTab = 'traitements'">Traitements</button>
+        </div>
+
           <div class="animals-grid">
-            <div class="animals-top">
-              <div class="card animal-form-card">
-                <div class="card-header">
-                  <h3>Saisie hebdomadaire</h3>
-                  <span class="pill subtle">Semaine de production non bloquée par la conso</span>
-                </div>
-                <form class="animal-info-form" @submit.prevent="saveAnimalInfo">
-                  <div class="form-row">
-                    <label>
-                      Semaine
-                      <select v-model.number="animalInfoForm.semaine_production" required>
-                        <option v-for="w in animalWeekOptions" :key="w.week" :value="w.week">
-                          S{{ w.week }} <span v-if="w.hasInfo">(déjà saisie)</span>
-                        </option>
-                      </select>
-                    </label>
-                    <label>
-                      Poids moyen (kg)
-                      <input type="number" step="0.01" min="0" v-model.number="animalInfoForm.poids_moyen" />
-                    </label>
-                  </div>
-
-                  <div class="form-row">
-                    <label>
-                      Morts semaine
-                      <input type="number" min="0" v-model.number="animalInfoForm.morts_semaine" />
-                    </label>
-                    <label>
-                      Animaux restants
-                      <input type="number" min="0" v-model.number="animalInfoForm.animaux_restants" />
-                    </label>
-                  </div>
-
-                  <label class="full-row">
-                    Note
-                    <textarea rows="2" v-model="animalInfoForm.note" placeholder="Observation, symptômes, etc."></textarea>
-                  </label>
-
-                  <div class="animal-info-actions">
-                    <button class="btn" type="submit">
-                      {{ editingAnimalInfoId ? 'Mettre à jour' : 'Ajouter' }}
-                    </button>
-                    <button
-                      v-if="editingAnimalInfoId"
-                      class="btn secondary"
-                      type="button"
-                      @click="resetAnimalInfoForm"
-                    >
-                      Annuler
-                    </button>
-                  </div>
-                </form>
-              </div>
-
-              <div class="card animal-summary-card">
-              <div class="card-header">
+            
+            
+            <div class="card treatment-suggestions">
+              
                 <div>
-                  <h2>Suivi hebdomadaire des animaux</h2>
-                  <p class="muted">La saisie poids/mortalité est indépendante des consommations.</p>
+                  <h2>Suivi animal</h2>
+                  <p class="muted small">Enregistrer les informations de vos animaux </p>
                 </div>
-                <div class="chip-group">
-                  <span class="pill strong">Initial: {{ band?.nombre_initial || 0 }}</span>
-                  <span class="pill danger">Morts cumulés: {{ totalAnimalDeaths }}</span>
-                  <span class="pill success">Survivants: {{ survivorsCount }}</span>
-                </div>
-              </div>
-
-              <div class="animal-stats">
-                <div class="stat-block">
-                  <span class="label">Race</span>
-                  <span class="value">{{ band?.race || '—' }}</span>
-                </div>
-                <div class="stat-block">
-                  <span class="label">Âge (sem.)</span>
-                  <span class="value">{{ animalAgeWeeks }}</span>
-                </div>
-                <div class="stat-block">
-                  <span class="label">Dernier poids</span>
-                  <span class="value">{{ animalLastWeight && animalLastWeight.value !== null ? animalLastWeight.value + ' kg' : '—' }}</span>
-                  <small v-if="animalLastWeight && animalLastWeight.week" class="muted">S{{ animalLastWeight.week }}</small>
-                </div>
-                <div class="stat-block">
-                  <span class="label">Dernière semaine saisie</span>
-                  <span class="value">S{{ lastAnimalWeek || '—' }}</span>
-                </div>
-                <div class="stat-block">
-                  <span class="label">Performance survie</span>
-                  <span class="value">{{ survivalPerformance.toFixed(0) }}%</span>
-                </div>
-                <div class="stat-block">
-                  <span class="label">Prochaine semaine</span>
-                  <span class="value">S{{ nextAnimalWeek }}</span>
-                </div>
-              </div>
-            </div>
-            </div>
-
-            <div class="card animal-table-card">
-              <div class="card-header">
-                <h3>Historique hebdomadaire</h3>
-                <span class="muted">Poids et mortalité par semaine</span>
-              </div>
-              <table class="animal-info-table">
-                <thead>
-                  <tr>
-                    <th>Semaine</th>
-                    <th>Poids (kg)</th>
-                      <th>Réf. poids (kg)</th>
-                    <th>Morts</th>
-                    <th>Restants</th>
-                      <th>Mortalité (%)</th>
-                    <th>Note</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr v-for="info in animalInfos" :key="info.id">
-                    <td>S{{ info.semaine_production }}</td>
-                    <td>{{ info.poids_moyen !== null && info.poids_moyen !== undefined ? info.poids_moyen : '--' }}</td>
-                      <td>
-                        <span v-if="weightRefDisplay(info.semaine_production)">{{ weightRefDisplay(info.semaine_production) }}</span>
-                        <span v-else class="muted">--</span>
-                      </td>
-                    <td>{{ info.morts_semaine || 0 }}</td>
-                    <td>{{ info.animaux_restants !== null && info.animaux_restants !== undefined ? info.animaux_restants : '--' }}</td>
-                      <td>
-                        <div>{{ formatNumber(calculateWeeklyMortalityRate(info)) }} %</div>
-                        <div class="muted small">Réf {{ mortalityRefDisplay(info.semaine_production) }}</div>
-                      </td>
-                    <td>{{ info.note || '--' }}</td>
-                    <td class="table-actions">
-                      <button class="icon-btn" title="Modifier" @click="startEditAnimalInfo(info)">✏️</button>
-                      <button class="icon-btn danger" title="Supprimer" @click="deleteAnimalInfo(info)">🗑️</button>
-                    </td>
-                  </tr>
-                  <tr v-if="animalInfos.length === 0">
-                      <td colspan="7" class="muted">Aucune donnée pour l'instant.</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div class="card animal-visuals-card">
-              <div class="card-header space-between">
-                <h3>Visualisations</h3>
-                <div class="legend">
-                  <span class="legend-dot filled"></span> Observé
-                  <span class="legend-dot free"></span> Réf. basse/haute
-                </div>
-              </div>
-              <div class="visuals-grid">
-                <div class="chart-item full-width">
-                  <AnimalWeightChart
-                    :labels="weightChartLabels"
-                    :actual="weightActualSeries"
-                    :ref-low="weightRefLowSeries"
-                    :ref-high="weightRefHighSeries"
-                  />
-                </div>
-                <div class="chart-item full-width">
-                  <AnimalMortalityChart
-                    :labels="animalLineLabels"
-                    :series="animalMortalitySeries"
-                    :ref-low="animalRefLowSeries"
-                    :ref-high="animalRefHighSeries"
-                  />
-                </div>
-                <div class="chart-item">
-                  <AnimalWeeklyPie
-                    :survived="animalPieSurvivors"
-                    :deaths="animalPieDeaths"
-                    title="Survie estimée"
-                  />
-                </div>
-                <div class="chart-item">
-                  <h4>Performance de survie</h4>
-                  <PerformanceGauge :score="survivalPerformance" />
-                  <p class="muted small">Objectif: rester au-dessus de 90% de survie.</p>
-                </div>
-                <div class="chart-item mortality-ref-card">
-                  <div class="mortality-ref-header">
-                    <div>
-                      <h4>Références mortalité</h4>
-                      <p class="muted small">Plage cible hebdo (basse / haute) et votre observé.</p>
-                    </div>
-                    <span class="pill subtle">S1-S12</span>
+              <div class="animals-top">
+                <div class="card animal-form-card">
+                  <div class="card-header">
+                    <h3>Saisie hebdomadaire</h3>
+                    <span class="pill subtle">Semaine de production non bloquée par la conso</span>
                   </div>
-                  <table class="weekly-consumption-table mortality-ref-table">
-                    <thead>
-                      <tr>
-                        <th>Semaine</th>
-                        <th>Réf. basse</th>
-                        <th>Réf. haute</th>
-                        <th>Observé</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr v-for="row in mortalityReferenceRows" :key="row.week">
-                        <td>S{{ row.week }}</td>
-                        <td>{{ row.low }}%</td>
-                        <td>{{ row.high }}%</td>
-                        <td :class="{ 'text-good': (row.actual ?? 0) <= row.high, 'text-bad': (row.actual ?? 0) > row.high }">
-                          {{ row.actual !== null && row.actual !== undefined ? row.actual + '%' : '--' }}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
+                  <form class="animal-info-form" @submit.prevent="saveAnimalInfo">
+                    <div class="form-row">
+                      <label>
+                        Semaine
+                        <select v-model.number="animalInfoForm.semaine_production" required>
+                          <option v-for="w in animalWeekOptions" :key="w.week" :value="w.week">
+                            S{{ w.week }} <span v-if="w.hasInfo">(déjà saisie)</span>
+                          </option>
+                        </select>
+                      </label>
+                      <label>
+                        Poids moyen (kg)
+                        <input type="number" step="0.01" min="0" v-model.number="animalInfoForm.poids_moyen" />
+                      </label>
+                    </div>
 
-            <div class="card animal-advice-card">
-              <div class="card-header space-between">
-                <h3>Alertes & conseils</h3>
-                <span class="pill subtle">Basé sur la dernière saisie</span>
-              </div>
-              <div class="advice-list">
-                <div
-                  v-for="(advice, idx) in animalAdvice"
-                  :key="idx"
-                  :class="['advice', advice.level]"
-                >
-                  {{ advice.text }}
+                    <div class="form-row">
+                      <label>
+                        Morts semaine
+                        <input type="number" min="0" v-model.number="animalInfoForm.morts_semaine" />
+                      </label>
+                      <label>
+                        Animaux restants
+                        <h2 style="color:grey" >{{animalInfoForm.animaux_restants-animalInfoForm.morts_semaine}} </h2>
+                      </label>
+                    </div>
+
+                    <label class="full-row">
+                      Note
+                      <textarea rows="2" v-model="animalInfoForm.note" placeholder="Observation, symptômes, etc."></textarea>
+                    </label>
+
+                    <div class="animal-info-actions">
+                      <button class="btn" type="submit">
+                        {{ editingAnimalInfoId ? 'Mettre à jour' : 'Ajouter' }}
+                      </button>
+                      <button
+                        v-if="editingAnimalInfoId"
+                        class="btn secondary"
+                        type="button"
+                        @click="resetAnimalInfoForm"
+                      >
+                        Annuler
+                      </button>
+                    </div>
+                  </form>
                 </div>
-                <div v-if="!animalAdvice.length" class="muted">Aucune alerte pour l'instant.</div>
+
+                <div class="card animal-summary-card">
+                <div class="card-header">
+                  <div>
+                    <h2>Suivi hebdomadaire des animaux</h2>
+                    <p class="muted">La saisie poids/mortalité est indépendante des consommations.</p>
+                  </div>
+                  <div class="chip-group">
+                    <span class="pill strong">Initial: {{ band?.nombre_initial || 0 }}</span>
+                    <span class="pill danger">Morts cumulés: {{ totalAnimalDeaths }}</span>
+                    <span class="pill success">Survivants: {{ survivorsCount }}</span>
+                  </div>
+                </div>
+
+                <div class="animal-stats">
+                  <div class="stat-block">
+                    <span class="label">Race</span>
+                    <span class="value">{{ band?.race || '—' }}</span>
+                  </div>
+                  <div class="stat-block">
+                    <span class="label">Âge (sem.)</span>
+                    <span class="value">{{ animalAgeWeeks }}</span>
+                  </div>
+                  <div class="stat-block">
+                    <span class="label">Dernier poids</span>
+                    <span class="value">{{ animalLastWeight && animalLastWeight.value !== null ? animalLastWeight.value + ' kg' : '—' }}</span>
+                    <small v-if="animalLastWeight && animalLastWeight.week" class="muted">S{{ animalLastWeight.week }}</small>
+                  </div>
+                  <div class="stat-block">
+                    <span class="label">Dernière semaine saisie</span>
+                    <span class="value">S{{ lastAnimalWeek || '—' }}</span>
+                  </div>
+                  <div class="stat-block">
+                    <span class="label">Performance survie</span>
+                    <span class="value">{{ survivalPerformance.toFixed(0) }}%</span>
+                  </div>
+                  <div class="stat-block">
+                    <span class="label">Prochaine semaine</span>
+                    <span class="value">S{{ nextAnimalWeek }}</span>
+                  </div>
+                </div>
+              </div>
+              </div>
+
+              <div class="card animal-table-card">
+                <div class="card-header">
+                  <h3>Historique hebdomadaire</h3>
+                  <span class="muted">Poids et mortalité par semaine</span>
+                </div>
+                <table class="animal-info-table">
+                  <thead>
+                    <tr>
+                      <th>Semaine</th>
+                      <th>Poids (kg)</th>
+                        <th>Réf. poids (kg)</th>
+                      <th>Morts</th>
+                      <th>Restants</th>
+                        <th>Mortalité (%)</th>
+                      <th>Note</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="info in animalInfos" :key="info.id">
+                      <td>S{{ info.semaine_production }}</td>
+                      <td>{{ info.poids_moyen !== null && info.poids_moyen !== undefined ? info.poids_moyen : '--' }}</td>
+                        <td>
+                          <span v-if="weightRefDisplay(info.semaine_production)">{{ weightRefDisplay(info.semaine_production) }}</span>
+                          <span v-else class="muted">--</span>
+                        </td>
+                      <td>{{ info.morts_semaine || 0 }}</td>
+                      <td>{{ info.animaux_restants !== null && info.animaux_restants !== undefined ? info.animaux_restants : '--' }}</td>
+                        <td>
+                          <div>{{ formatNumber(calculateWeeklyMortalityRate(info)) }} %</div>
+                          <div class="muted small">Réf {{ mortalityRefDisplay(info.semaine_production) }}</div>
+                        </td>
+                      <td>{{ info.note || '--' }}</td>
+                      <td class="table-actions">
+                        <button class="icon-btn" title="Modifier" @click="startEditAnimalInfo(info)">✏️</button>
+                        <button class="icon-btn danger" title="Supprimer" @click="deleteAnimalInfo(info)">🗑️</button>
+                      </td>
+                    </tr>
+                    <tr v-if="animalInfos.length === 0">
+                        <td colspan="7" class="muted">Aucune donnée pour l'instant.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="card animal-visuals-card">
+                <div class="card-header space-between">
+                  <h3>Visualisations</h3>
+                  <div class="legend">
+                    <span class="legend-dot filled"></span> Observé
+                    <span class="legend-dot free"></span> Réf. basse/haute
+                  </div>
+                </div>
+                <div class="visuals-grid">
+                  <div class="chart-item full-width">
+                    <AnimalWeightChart
+                      :labels="weightChartLabels"
+                      :actual="weightActualSeries"
+                      :ref-low="weightRefLowSeries"
+                      :ref-high="weightRefHighSeries"
+                    />
+                  </div>
+                  <div class="chart-item full-width">
+                    <AnimalMortalityChart
+                      :labels="animalLineLabels"
+                      :series="animalMortalitySeries"
+                      :ref-low="animalRefLowSeries"
+                      :ref-high="animalRefHighSeries"
+                    />
+                  </div>
+                  <div class="chart-item">
+                    <AnimalWeeklyPie
+                      :survived="animalPieSurvivors"
+                      :deaths="animalPieDeaths"
+                      title="Survie estimée"
+                    />
+                  </div>
+                  <div class="chart-item">
+                    <h4>Performance de survie</h4>
+                    <PerformanceGauge :score="survivalPerformance" />
+                    <p class="muted small">Objectif: rester au-dessus de 90% de survie.</p>
+                  </div>
+                  <div class="chart-item mortality-ref-card">
+                    <div class="mortality-ref-header">
+                      <div>
+                        <h4>Références mortalité</h4>
+                        <p class="muted small">Plage cible hebdo (basse / haute) et votre observé.</p>
+                      </div>
+                      <span class="pill subtle">S1-S12</span>
+                    </div>
+                    <table class="weekly-consumption-table mortality-ref-table">
+                      <thead>
+                        <tr>
+                          <th>Semaine</th>
+                          <th>Réf. basse</th>
+                          <th>Réf. haute</th>
+                          <th>Observé</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="row in mortalityReferenceRows" :key="row.week">
+                          <td>S{{ row.week }}</td>
+                          <td>{{ row.low }}%</td>
+                          <td>{{ row.high }}%</td>
+                          <td :class="{ 'text-good': (row.actual ?? 0) <= row.high, 'text-bad': (row.actual ?? 0) > row.high }">
+                            {{ row.actual !== null && row.actual !== undefined ? row.actual + '%' : '--' }}
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card animal-advice-card">
+                <div class="card-header space-between">
+                  <h3>Alertes & conseils</h3>
+                  <span class="pill subtle">Basé sur la dernière saisie</span>
+                </div>
+                <div class="advice-list">
+                  <div
+                    v-for="(advice, idx) in animalAdvice"
+                    :key="idx"
+                    :class="['advice', advice.level]"
+                  >
+                    {{ advice.text }}
+                  </div>
+                  <div v-if="!animalAdvice.length" class="muted">Aucune alerte pour l'instant.</div>
+                </div>
               </div>
             </div>
           </div>
         </section>
 
         <section
-          v-if="activeTab === 'traitements'"
+          v-if="activeTab === 'sante' && santeSubTab === 'traitements'"
           class="tab-panel traitements-panel"
         >
+          <!-- Sante subtab controls -->
+        <div v-if="activeTab === 'sante'" class="sante-subtabs" style="margin-top: 16px; gap: 10px; margin-left: 20px;">
+          <button  :class="['finance-subtab', { active: santeSubTab === 'animaux' }]" @click="santeSubTab = 'animaux'">Animaux</button>
+          <button :class="['finance-subtab', { active: santeSubTab === 'traitements' }]" @click="santeSubTab = 'traitements'">Traitements</button>
+        </div>
           <div class="treatments-grid">
             <div class="card treatment-suggestions">
               <div class="card-header space-between">
@@ -1417,7 +1422,7 @@
               Dépenses
             </button>
             <button
-              :class="['finance-subtab', { active: financeSubTab === 'gains' }]"
+              :class="['subtab', { active: financeSubTab === 'gains' }]"
               @click="financeSubTab = 'gains'"
             >
               Gains
@@ -1646,7 +1651,6 @@
           </div>
         </div>
       </main>
-    </div>
   </div>
 </template>
 
@@ -1672,6 +1676,19 @@ import WaterVolumeChart from './charts/WaterVolumeChart.vue';
 import TreatmentUsageChart from './charts/TreatmentUsageChart.vue';
 import ExpenseDonutChart from './charts/ExpenseDonutChart.vue';
 import KeyDatesTimeline from './charts/KeyDatesTimeline.vue';
+
+// Methods modules
+import * as dashboardMethods from './methods/dashboardMethods.js';
+import * as consommationMethods from './methods/consommationMethods.js';
+import * as predictionsMethods from './methods/predictionsMethods.js';
+import * as animauxMethods from './methods/animauxMethods.js';
+import * as chatbotMethods from './methods/chatbotMethods.js';
+import * as financesMethods from './methods/financesMethods.js';
+import * as tabUtils from './methods/tabUtils.js';
+import * as messageMethods from './methods/messageMethods.js';
+import * as traitementsMethods from './methods/traitementsMethods.js';
+import * as depensesMethods from './methods/depensesMethods.js';
+import * as gainsMethods from './methods/gainsMethods.js';
 
 export default {
   name: 'Bandes',
@@ -1774,6 +1791,8 @@ export default {
       ],
       interventions: [],
       predictions: [],
+      optimalPrediction: null,
+      totalPredictedProfit: 0,
       _fetchingTab: null,
       messages: [
         { from: 'bot', text: 'Bonjour ! Comment puis-je vous aider avec votre bande avicole ?' }
@@ -1812,6 +1831,7 @@ export default {
 
       selectedDisease: '',
       selectedSymptom: '',
+      santeSubTab: 'animaux',
       treatmentForm: {
         maladie: '',
         produit: '',
@@ -2188,68 +2208,9 @@ export default {
       return Math.max(0, initial - this.totalAnimalDeaths);
     },
 
-    gainsComputed() {
-      const price = Number(this.gainPricePerKg) || 0;
-      const initial = this.band?.nombre_initial || 0;
+    gainsComputed() { return gainsMethods.computeGainsComputed(this); },
 
-      const weeksWithWeight = [...this.animalInfos
-        .filter(i => i.semaine_production && i.poids_moyen !== null && i.poids_moyen !== undefined)
-        .map(i => i.semaine_production)]
-        .sort((a, b) => a - b)
-        .filter((w, idx, arr) => arr.indexOf(w) === idx);
-
-      if (!weeksWithWeight.length) {
-        return { labels: [], actual: [], reference: [], cumActual: 0, cumRef: 0, delta: 0 };
-      }
-
-      const deathsByWeek = new Map();
-      this.animalInfos.forEach(info => {
-        if (info?.semaine_production) {
-          deathsByWeek.set(info.semaine_production, Number(info.morts_semaine || 0));
-        }
-      });
-
-      let cumulativeDeaths = 0;
-      const labels = [];
-      const actual = [];
-      const reference = [];
-
-      for (const w of weeksWithWeight) {
-        cumulativeDeaths += deathsByWeek.get(w) || 0;
-        const alive = Math.max(0, initial - cumulativeDeaths);
-
-        const actualInfo = this.animalInfos.find(i => i.semaine_production === w);
-        const weightActual = actualInfo?.poids_moyen ? Number(actualInfo.poids_moyen) : null;
-        const refObj = this.weightReference.find(r => r.week === w);
-        const weightRef = refObj ? ((refObj.low + refObj.high) / 2) : null;
-
-        const gainAct = weightActual && price ? weightActual * alive * price : 0;
-        const gainRef = weightRef && price ? weightRef * alive * price : 0;
-
-        labels.push(`S${w}`);
-        actual.push(Math.round(gainAct));
-        reference.push(Math.round(gainRef));
-      }
-
-      const cumActual = actual.reduce((a, b) => a + b, 0);
-      const cumRef = reference.reduce((a, b) => a + b, 0);
-
-      return {
-        labels,
-        actual,
-        reference,
-        cumActual,
-        cumRef,
-        delta: cumActual - cumRef
-      };
-    },
-
-    gainPerformanceScore() {
-      const ref = this.gainsComputed.cumRef || 0;
-      if (!ref) return 0;
-      const ratio = (this.gainsComputed.cumActual / ref) * 100;
-      return Math.max(0, Math.min(150, ratio));
-    },
+    gainPerformanceScore() { return gainsMethods.computeGainPerformanceScore(this); },
 
     totalExpensesElementaires() {
       return (this.expenseRecords || []).reduce((sum, e) => sum + (Number(e?.montant) || 0), 0);
@@ -2283,17 +2244,7 @@ export default {
       return this.totalCost + this.totalExpensesElementaires + this.totalTreatmentCost;
     },
 
-    profitComputed() {
-      const revenue = this.gainsComputed.cumActual || 0;
-      const revenueRef = this.gainsComputed.cumRef || 0;
-      const costs = this.totalCostsAll;
-      return {
-        revenue,
-        revenueRef,
-        costs,
-        profit: revenue - costs
-      };
-    },
+    profitComputed() { return gainsMethods.computeProfitComputed(this); },
 
     weekOptions() {
       const usedWeeks = new Set(
@@ -2976,61 +2927,10 @@ export default {
   },
   
   methods: {
-    toggleMessageTab(tab) {
-      if (!this.messageCounts[tab]) {
-        const first = this.availableMessageTypes[0];
-        if (first) {
-          this.activeMessageTab = first;
-          this.messagesDrawerOpen = true;
-        } else {
-          this.messagesDrawerOpen = false;
-        }
-        return;
-      }
-
-      if (this.activeMessageTab === tab) {
-        this.messagesDrawerOpen = !this.messagesDrawerOpen;
-      } else {
-        this.activeMessageTab = tab;
-        this.messagesDrawerOpen = true;
-      }
-    },
-
-    dismissMessage(id) {
-      if (!id) return;
-      if (!this.dismissedMessageIds.includes(id)) {
-        this.dismissedMessageIds.push(id);
-      }
-      this.$nextTick(() => this.ensureActiveMessageTab());
-    },
-
-    dismissMessageBucket(tab) {
-      const bucket = this.messageBuckets[tab] || [];
-      bucket.forEach(m => {
-        if (m.id && !this.dismissedMessageIds.includes(m.id)) {
-          this.dismissedMessageIds.push(m.id);
-        }
-      });
-      this.$nextTick(() => this.ensureActiveMessageTab());
-    },
-
-    ensureActiveMessageTab() {
-      const counts = this.messageCounts;
-      if (counts[this.activeMessageTab] > 0) {
-        if (this.messagesDrawerOpen && !this.currentMessages.length) {
-          this.messagesDrawerOpen = false;
-        }
-        return;
-      }
-
-      const first = this.availableMessageTypes[0];
-      if (first) {
-        this.activeMessageTab = first;
-        this.messagesDrawerOpen = false;
-      } else {
-        this.messagesDrawerOpen = false;
-      }
-    },
+    toggleMessageTab(tab) { return messageMethods.toggleMessageTab(this, tab); },
+    dismissMessage(id) { return messageMethods.dismissMessage(this, id); },
+    dismissMessageBucket(tab) { return messageMethods.dismissMessageBucket(this, tab); },
+    ensureActiveMessageTab() { return messageMethods.ensureActiveMessageTab(this); },
 
     goHome() {
       if (this.$router) {
@@ -3118,98 +3018,29 @@ export default {
       }, 100);
     },
 
-    closeExpenseDrawer() {
-      this.expenseDrawerOpen = false;
-      this.expenseSelected = null;
-    },
+    closeExpenseDrawer() { return depensesMethods.closeExpenseDrawer(this); },
 
-    expenseStorageKey() {
-      return `expenses_${this.id || 'default'}`;
-    },
+    expenseStorageKey() { return depensesMethods.expenseStorageKey(this); },
 
-    treatmentStorageKey() {
-      return `treatments_${this.id || 'default'}`;
-    },
+    treatmentStorageKey() { return traitementsMethods.treatmentStorageKey(this); },
 
-    loadExpenseRecordsFromStorage() {
-      try {
-        const raw = localStorage.getItem(this.expenseStorageKey());
-        this.expenseRecords = raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        console.warn('Erreur chargement dépenses locales', e);
-        this.expenseRecords = [];
-      }
-    },
+    loadExpenseRecordsFromStorage() { return depensesMethods.loadExpenseRecordsFromStorage(this); },
 
-    loadTreatmentRecordsFromStorage() {
-      try {
-        const raw = localStorage.getItem(this.treatmentStorageKey());
-        this.treatmentRecords = raw ? JSON.parse(raw) : [];
-      } catch (e) {
-        console.warn('Erreur chargement traitements locaux', e);
-        this.treatmentRecords = [];
-      }
-    },
+    loadTreatmentRecordsFromStorage() { return traitementsMethods.loadTreatmentRecordsFromStorage(this); },
 
-    saveExpense() {
-      if (!this.expenseForm.tache || !this.expenseForm.date || !this.expenseForm.montant) return;
-      const payload = {
-        ...this.expenseForm,
-        montant: Number(this.expenseForm.montant),
-        label: this.expenseForm.tache,
-        id: crypto.randomUUID()
-      };
-      this.expenseRecords = [payload, ...this.expenseRecords].slice(0, 30);
-      localStorage.setItem(this.expenseStorageKey(), JSON.stringify(this.expenseRecords));
-      this.closeExpenseDrawer();
-    },
+    saveExpense() { return depensesMethods.saveExpense(this); },
 
-    getExpenseImage(pathOrName) {
-      const match = this.expenseCatalog.find(e => e.name === pathOrName) || this.expenseCatalog.find(e => e.image === pathOrName);
-      const path = match?.image || pathOrName;
-      try {
-        return new URL(path, import.meta.url).href;
-      } catch (e) {
-        return this.medocPlaceholder;
-      }
-    },
+    getExpenseImage(pathOrName) { return depensesMethods.getExpenseImage(this, pathOrName); },
 
-    formatNumber(value, decimals = 2) {
-      if (value === null || value === undefined || Number.isNaN(value)) return '0';
-      const num = Number(value);
-      return Number.isFinite(num) ? num.toFixed(decimals) : '0';
-    },
+    openExpenseDrawer(item) { return depensesMethods.openExpenseDrawer(this, item); },
 
-    formatCurrencyFCFA(value, decimals = 0) {
-      const num = Number(value);
-      if (!Number.isFinite(num)) return '0 FCFA';
-      return `${num.toFixed(decimals)} FCFA`;
-    },
+    formatNumber(value, decimals = 2) { return tabUtils.formatNumber(value, decimals); },
+    formatCurrencyFCFA(value, decimals = 0) { return tabUtils.formatCurrencyFCFA(value, decimals); },
+    formatWeekRange(startDate, week) { return tabUtils.formatWeekRange(startDate, week); },
 
-    formatWeekRange(startDate, week) {
-      if (!startDate) return '—';
-      const start = new Date(startDate);
-      start.setDate(start.getDate() + (week - 1) * 7);
-      const end = new Date(start);
-      end.setDate(start.getDate() + 6);
-      return `${start.toLocaleDateString('fr-FR')} - ${end.toLocaleDateString('fr-FR')}`;
-    },
+    formatPercent(val) { return tabUtils.formatPercent(val); },
 
-    formatPercent(val) {
-      const num = Number(val);
-      if (!Number.isFinite(num)) return '0%';
-      return `${num.toFixed(0)}%`;
-    },
-
-    updateCostPreview() {
-      const kg = parseFloat(this.consumptionForm.kg || 0) || 0;
-      const prixAlim = parseFloat(this.consumptionForm.prix_unitaire || 0) || 0;
-      const eau = parseFloat(this.consumptionForm.eau_litres || 0) || 0;
-      const prixEau = parseFloat(this.consumptionForm.prix_eau_unitaire || 0) || 0;
-      const cost = Math.round(kg * prixAlim + eau * prixEau);
-      this.consumptionFormCostPreview = cost;
-      this.consumptionForm.cout = cost;
-    },
+    updateCostPreview() { return consommationMethods.updateCostPreview(this); },
 
     averageUnitPrice(type) {
       const values = this.consommations
@@ -3259,44 +3090,12 @@ export default {
       start.setDate(start.getDate() + (week - 1) * 7);
       return start.toISOString().slice(0, 10);
     },
+    parseDate(str) { return tabUtils.parseDate(str); },
+    isSameDay(a, b) { return tabUtils.isSameDay(a, b); },
+    getFilledWeeksMap() { return tabUtils.getFilledWeeksMapFrom(this.consommations); },
+    scrollToConsumptionForm() { return tabUtils.scrollToConsumptionForm(); },
 
-    parseDate(str) {
-      if (!str) return null;
-      const parts = str.split('/');
-      if (parts.length === 3) {
-        const [day, month, year] = parts;
-        const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
-        return Number.isNaN(d.getTime()) ? null : d;
-      }
-      const d = new Date(str);
-      return Number.isNaN(d.getTime()) ? null : d;
-    },
-
-    isSameDay(a, b) {
-      return a && b && a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-    },
-
-    getFilledWeeksMap() {
-      const map = new Map();
-      this.consommations.forEach(c => {
-        if (c.semaine_production) map.set(c.semaine_production, true);
-      });
-      return map;
-    },
-
-    scrollToConsumptionForm() {
-      this.$nextTick(() => {
-        const el = document.querySelector('.consumption-form');
-        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      });
-    },
-
-    recommendedDose(t) {
-      if (!t?.doses) return '—';
-      const age = this.animalAgeWeeks || 0;
-      const found = t.doses.find(d => age <= d.maxWeek);
-      return found ? found.text : t.doses[t.doses.length - 1].text;
-    },
+    recommendedDose(t) { return traitementsMethods.recommendedDose(this, t); },
 
     getMedocImage(relPath) {
       try {
@@ -3310,41 +3109,11 @@ export default {
       evt.target.src = this.medocPlaceholder;
     },
 
-    prefillTreatment(t) {
-      this.treatmentForm.produit = t?.name || '';
-      this.treatmentForm.maladie = this.selectedDisease || (t?.diseases?.[0] || '');
-      this.treatmentForm.dose = this.recommendedDose(t);
-      this.treatmentForm.note = t?.description || '';
-      this.treatmentForm.cout = t?.cost || 0;
-      this.$nextTick(() => {
-        const form = document.querySelector('.treatment-form');
-        if (form) {
-          form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          const firstInput = form.querySelector('input, select, textarea');
-          if (firstInput) firstInput.focus();
-        }
-      });
-    },
+    prefillTreatment(t) { return traitementsMethods.prefillTreatment(this, t); },
 
-    resetTreatmentForm() {
-      this.treatmentForm = {
-        maladie: '',
-        produit: '',
-        dose: '',
-        debut: new Date().toISOString().slice(0, 10),
-        fin: '',
-        note: '',
-        cout: 0
-      };
-    },
+    resetTreatmentForm() { return traitementsMethods.resetTreatmentForm(this); },
 
-    addTreatmentRecord() {
-      const record = { ...this.treatmentForm, cout: Number(this.treatmentForm.cout) || 0 };
-      this.treatmentRecords.unshift(record);
-      localStorage.setItem(this.treatmentStorageKey(), JSON.stringify(this.treatmentRecords));
-      this.resetTreatmentForm();
-      alert('✅ Traitement enregistré (local)');
-    },
+    addTreatmentRecord() { return traitementsMethods.addTreatmentRecord(this); },
 
     editWeek(row) {
       if (!row?.consumptionId) return;
@@ -3483,177 +3252,18 @@ export default {
       return mortalityRate < 5 ? 0.5 : 2.5;
     },
 
-    async loadAnimalInfos() {
-      try {
-        if (!this.id) return;
+    async loadAnimalInfos() { return await animauxMethods.loadAnimalInfos(this); },
 
-        const url = `http://localhost:5000/animal-info/bande/${this.id}`;
-        const response = await fetch(url, { credentials: 'include' });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          console.warn('❌ Erreur chargement animal-info:', error.error || response.statusText);
-          this.animalInfos = [];
-          return;
-        }
-
-        const data = await response.json();
-        this.animalInfos = (data.animal_info || [])
-          .map(info => ({
-            ...info,
-            morts_semaine: info.morts_semaine || 0
-          }))
-          .sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
-
-        if (!this.editingAnimalInfoId) {
-          this.resetAnimalInfoForm();
-        }
-      } catch (error) {
-        console.warn('❌ Erreur loadAnimalInfos:', error);
-        this.animalInfos = [];
-      }
-    },
-
-    getMortalityRef(week) {
-      return this.mortalityReference.find(ref => ref.week === week) || { low: 0, high: 0 };
-    },
-
-    getWeightRef(week) {
-      return this.weightReference.find(ref => ref.week === week) || { low: null, high: null };
-    },
-
-    weightRefDisplay(week) {
-      const ref = this.getWeightRef(week);
-      if (ref.low === null || ref.high === null) return '';
-      return `${ref.low.toFixed(2)} - ${ref.high.toFixed(2)}`;
-    },
-
-    mortalityRefDisplay(week) {
-      const ref = this.getMortalityRef(week);
-      return `${ref.low}% - ${ref.high}%`;
-    },
-
-    calculateWeeklyMortalityRate(info) {
-      const initial = this.band?.nombre_initial || 0;
-      if (!initial) return 0;
-      const morts = info?.morts_semaine || 0;
-      return parseFloat(((morts / initial) * 100).toFixed(2));
-    },
-
-    resetAnimalInfoForm() {
-      this.editingAnimalInfoId = null;
-      this.animalInfoForm = {
-        semaine_production: this.nextAnimalWeek,
-        poids_moyen: null,
-        morts_semaine: 0,
-        animaux_restants: this.survivorsCount || null,
-        note: ''
-      };
-    },
-
-    startEditAnimalInfo(info) {
-      if (!info) return;
-      this.editingAnimalInfoId = info.id;
-      this.animalInfoForm = {
-        semaine_production: info.semaine_production,
-        poids_moyen: info.poids_moyen,
-        morts_semaine: info.morts_semaine || 0,
-        animaux_restants: info.animaux_restants,
-        note: info.note || ''
-      };
-    },
-
-    async saveAnimalInfo() {
-      try {
-        if (!this.id) {
-          alert('⚠️ Veuillez d\'abord sélectionner une bande');
-          return;
-        }
-
-        const isEditing = !!this.editingAnimalInfoId;
-        const week = this.animalInfoForm.semaine_production || this.nextAnimalWeek;
-
-        const duplicateWeek = this.animalInfos.some(
-          info => info.semaine_production === week && info.id !== this.editingAnimalInfoId
-        );
-        if (duplicateWeek) {
-          alert(`❌ Une entrée existe déjà pour la semaine ${week}. Modifiez-la ou supprimez-la avant.`);
-          return;
-        }
-
-        const payload = {
-          bande_id: parseInt(this.id),
-          semaine_production: week,
-          poids_moyen: this.animalInfoForm.poids_moyen || null,
-          morts_semaine: this.animalInfoForm.morts_semaine || 0,
-          animaux_restants: this.animalInfoForm.animaux_restants,
-          note: this.animalInfoForm.note?.trim() || null
-        };
-
-        const url = isEditing
-          ? `http://localhost:5000/animal-info/${this.editingAnimalInfoId}`
-          : 'http://localhost:5000/animal-info/';
-        const method = isEditing ? 'PUT' : 'POST';
-
-        const response = await fetch(url, {
-          method,
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-
-        const data = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          const errorMsg = data.error || 'Erreur lors de la sauvegarde';
-          console.error('❌ Animal info save error:', errorMsg);
-          alert(`❌ ${errorMsg}`);
-          return;
-        }
-
-        if (isEditing) {
-          const idx = this.animalInfos.findIndex(i => i.id === this.editingAnimalInfoId);
-          if (idx !== -1) {
-            this.animalInfos.splice(idx, 1, data);
-          }
-          alert('✅ Semaine mise à jour');
-        } else {
-          this.animalInfos.push(data);
-          alert('✅ Semaine ajoutée');
-        }
-
-        this.animalInfos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
-        this.resetAnimalInfoForm();
-      } catch (error) {
-        console.error('❌ saveAnimalInfo error:', error);
-        alert('❌ Impossible de sauvegarder les données animaux');
-      }
-    },
-
-    async deleteAnimalInfo(info) {
-      if (!info?.id) return;
-      const confirmed = window.confirm('Supprimer cette semaine ?');
-      if (!confirmed) return;
-
-      try {
-        const response = await fetch(`http://localhost:5000/animal-info/${info.id}`, {
-          method: 'DELETE',
-          credentials: 'include'
-        });
-
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({}));
-          alert(`❌ ${error.error || 'Suppression impossible'}`);
-          return;
-        }
-
-        this.animalInfos = this.animalInfos.filter(i => i.id !== info.id);
-        this.resetAnimalInfoForm();
-        alert('🗑️ Enregistrement supprimé');
-      } catch (error) {
-        console.error('❌ deleteAnimalInfo error:', error);
-        alert('❌ Erreur lors de la suppression');
-      }
-    },
+    getMortalityRef(week) { return animauxMethods.getMortalityRef(this, week); },
+    getWeightRef(week) { return animauxMethods.getWeightRef(this, week); },
+    weightRefDisplay(week) { return animauxMethods.weightRefDisplay(this, week); },
+    mortalityRefDisplay(week) { return animauxMethods.mortalityRefDisplay(this, week); },
+    calculateWeeklyMortalityRate(info) { return animauxMethods.calculateWeeklyMortalityRate(this, info); },
+    async loadAnimalInfos() { return await animauxMethods.loadAnimalInfos(this); },
+    resetAnimalInfoForm() { return animauxMethods.resetAnimalInfoForm(this); },
+    startEditAnimalInfo(info) { return animauxMethods.startEditAnimalInfo(this, info); },
+    async saveAnimalInfo() { return await animauxMethods.saveAnimalInfo(this); },
+    async deleteAnimalInfo(info) { return await animauxMethods.deleteAnimalInfo(this, info); },
 
     calculateICTrend() {
       // Indice de consommation (plus bas = mieux)
@@ -3707,46 +3317,7 @@ export default {
       }
     },
 
-    async loadConsommations() {
-      if (!this.id) {
-        console.warn('No band ID available');
-        return;
-      }
-
-      const url = `http://localhost:5000/consommations/bande/${this.id}`;
-      console.log('📥 Chargement consommations depuis:', url);
-
-      const response = await fetch(url, {
-        credentials: 'include'
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        console.log('📊 Données reçues:', data.count || 0, 'consommations');
-
-        const raw = data.consommations || [];
-        this.consommations = raw.map(c => ({
-          id: c.id,
-          date: c.date,
-          type: c.type_aliment || '',
-          kg: c.aliment_kg || 0,
-          cout: (c.cout_aliment || 0) + (c.prix_eau_unitaire || 0) * (c.eau_litres || 0),
-          bande_id: c.bande_id,
-          eau_litres: c.eau_litres || 0,
-          prix_unitaire: c.prix_unitaire || (c.aliment_kg ? (c.cout_aliment || 0) / c.aliment_kg : 0),
-          prix_eau_unitaire: c.prix_eau_unitaire || 25,
-          semaine_production: c.semaine_production || null
-        }));
-
-        this.filledWeeks = this.getFilledWeeksMap();
-
-        console.log('🔄 Consommations transformées:', this.consommations.length, 'items');
-      } else {
-        const error = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.warn('❌ Erreur API:', response.status, error);
-        this.consommations = [];
-      }
-    },
+    async loadConsommations() { return await consommationMethods.loadConsommations(this); },
 
     async fetchTabData(tab) {
       // Éviter les appels en double
@@ -3786,364 +3357,20 @@ export default {
     },
     
 
-    async addConsumption() {
-      try {
-        if (!this.id) {
-          alert("⚠️ Veuillez sélectionner une bande d'abord");
-          return;
-        }
+    async addConsumption() { return await consommationMethods.addConsumption(this); },
 
-        const durationWeeks = this.durationWeeks;
-        const isEditing = !!this.editingConsumptionId;
+    startEditConsumption(cons) { return consommationMethods.startEditConsumption(this, cons); },
 
-        if (!this.consumptionForm.semaine_production) {
-          alert('❌ Sélectionnez une semaine');
-          return;
-        }
-
-        if (!this.consumptionForm.type || this.consumptionForm.type.trim() === '') {
-          alert("❌ Le type d'aliment est obligatoire");
-          return;
-        }
-
-        const kgValue = parseFloat(this.consumptionForm.kg);
-        if (!this.consumptionForm.kg || isNaN(kgValue) || kgValue <= 0) {
-          alert("❌ La quantité (kg) doit être un nombre supérieur à 0");
-          return;
-        }
-
-        const weekNumber = parseInt(this.consumptionForm.semaine_production, 10);
-        if (weekNumber > durationWeeks) {
-          alert(`❌ La semaine ${weekNumber} dépasse la durée prévue (${durationWeeks} sem.)`);
-          return;
-        }
-
-        const existingWeek = this.consommations.find(c => c.semaine_production === weekNumber && c.id !== this.editingConsumptionId);
-        if (existingWeek) {
-          alert(`❌ Une consommation existe déjà pour la semaine ${weekNumber}. Supprimez-la ou modifiez-la avant d'ajouter.`);
-          return;
-        }
-
-        // Auto-remplir les semaines précédentes vides à 0 si on saute des semaines (persistées)
-        for (let w = 1; w < weekNumber; w++) {
-          const hasWeek = this.consommations.some(c => c.semaine_production === w);
-          if (!hasWeek) {
-            const zeroPayload = {
-              bande_id: parseInt(this.id),
-              date: this.getDateForWeek(w),
-              type_aliment: 'Auto 0',
-              aliment_kg: 0,
-              cout_aliment: 0,
-              eau_litres: 0,
-              prix_unitaire: 0,
-              prix_eau_unitaire: 25,
-              semaine_production: w,
-              poids_moyen_actuel: null
-            };
-            try {
-              const zeroResponse = await fetch('http://localhost:5000/consommations/', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify(zeroPayload)
-              });
-              if (zeroResponse.ok) {
-                const zr = await zeroResponse.json();
-                this.consommations.push({
-                  id: zr.id,
-                  date: zr.date,
-                  type: zr.type_aliment,
-                  kg: zr.aliment_kg,
-                  cout: (zr.cout_aliment || 0) + (zr.prix_eau_unitaire || 0) * (zr.eau_litres || 0),
-                  eau_litres: zr.eau_litres || 0,
-                  prix_unitaire: zr.prix_unitaire || 0,
-                  prix_eau_unitaire: zr.prix_eau_unitaire || 25,
-                  bande_id: zr.bande_id,
-                  semaine_production: zr.semaine_production || w
-                });
-              } else {
-                this.consommations.push({
-                  id: `tmp-${Date.now()}-${w}`,
-                  date: zeroPayload.date,
-                  type: 'Auto 0',
-                  kg: 0,
-                  cout: 0,
-                  bande_id: this.id,
-                  eau_litres: 0,
-                  prix_unitaire: 0,
-                  prix_eau_unitaire: 25,
-                  semaine_production: w
-                });
-              }
-            } catch (err) {
-              this.consommations.push({
-                id: `tmp-${Date.now()}-${w}`,
-                date: zeroPayload.date,
-                type: 'Auto 0',
-                kg: 0,
-                cout: 0,
-                bande_id: this.id,
-                eau_litres: 0,
-                prix_unitaire: 0,
-                prix_eau_unitaire: 25,
-                semaine_production: w
-              });
-            }
-          }
-        }
-
-        const prixUnitaire = parseFloat(this.consumptionForm.prix_unitaire || 0) || 0;
-        const prixEau = parseFloat(this.consumptionForm.prix_eau_unitaire || 0) || 0;
-        let coutTotal = parseFloat(this.consumptionForm.cout || 0) || 0;
-        if (!coutTotal) {
-          coutTotal = +(prixUnitaire * kgValue + prixEau * parseFloat(this.consumptionForm.eau_litres || 0)).toFixed(2);
-        }
-
-        const payload = {
-          bande_id: parseInt(this.id),
-          date: this.consumptionForm.date || this.getDateForWeek(weekNumber),
-          type_aliment: this.consumptionForm.type.trim(),
-          aliment_kg: kgValue,
-          cout_aliment: coutTotal,
-          eau_litres: parseFloat(this.consumptionForm.eau_litres || 0),
-          prix_unitaire: prixUnitaire || null,
-          prix_eau_unitaire: prixEau || 25,
-          semaine_production: weekNumber,
-          poids_moyen_actuel: null
-        };
-        
-        console.log('📤 Envoi à l\'API:', payload);
-        
-        const url = isEditing
-          ? `http://localhost:5000/consommations/${this.editingConsumptionId}`
-          : 'http://localhost:5000/consommations/';
-        const method = isEditing ? 'PUT' : 'POST';
-        
-        const response = await fetch(url, {
-          method,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json'
-          },
-          credentials: 'include',
-          body: JSON.stringify(payload)
-        });
-        
-        console.log('📥 Réponse API:', response.status, response.statusText);
-        
-        let responseData;
-        try {
-          responseData = await response.json();
-        } catch (e) {
-          responseData = { error: 'Réponse non valide' };
-        }
-        
-        if (response.ok) {
-          const updated = {
-            id: responseData.id,
-            date: responseData.date,
-            type: responseData.type_aliment,
-            kg: responseData.aliment_kg,
-            eau_litres: responseData.eau_litres || payload.eau_litres,
-            prix_unitaire: responseData.prix_unitaire || payload.prix_unitaire || 0,
-            prix_eau_unitaire: responseData.prix_eau_unitaire || payload.prix_eau_unitaire || 25,
-            cout: (responseData.cout_aliment || payload.cout_aliment || 0) + (responseData.prix_eau_unitaire || payload.prix_eau_unitaire || 0) * (responseData.eau_litres || payload.eau_litres || 0),
-            bande_id: responseData.bande_id,
-            semaine_production: responseData.semaine_production || weekNumber
-          };
-          
-          if (isEditing) {
-            const idx = this.consommations.findIndex(c => c.id === this.editingConsumptionId);
-            if (idx !== -1) {
-              this.consommations.splice(idx, 1, updated);
-            }
-            alert('✅ Consommation mise à jour');
-          } else {
-            this.consommations.unshift(updated);
-            alert('✅ Consommation ajoutée avec succès !');
-          }
-
-          this.resetConsumptionForm();
-          this.filledWeeks = this.getFilledWeeksMap();
-          this.filledWeeks = this.getFilledWeeksMap();
-          this.updateTrendsFromData();
-          this.calculateKPI();
-          console.log('Consommation sauvegardée:', updated);
-        } else {
-          const errorMsg = responseData.error || `Erreur ${response.status}`;
-          console.error('❌ Erreur détaillée:', { 
-            status: response.status, 
-            error: errorMsg,
-            payload 
-          });
-          alert(`❌ Erreur : ${errorMsg}`);
-        }
-        
-      } catch (error) {
-        console.error('💥 Erreur complète:', error);
-        
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
-          alert('🌐 Erreur de connexion au serveur');
-        } else {
-          alert(`💥 Erreur : ${error.message}`);
-        }
-      }
-    },
-
-    startEditConsumption(cons) {
-      this.editingConsumptionId = cons.id;
-      this.consumptionForm = {
-        date: cons.date,
-        semaine_production: cons.semaine_production,
-        type: cons.type,
-        kg: cons.kg,
-        cout: cons.cout,
-        eau_litres: cons.eau_litres || 0,
-        prix_unitaire: cons.prix_unitaire || 0,
-        prix_eau_unitaire: cons.prix_eau_unitaire ?? 25
-      };
-      this.consumptionFormCostPreview = cons.cout || 0;
-      this.scrollToConsumptionForm();
-    },
-
-    resetConsumptionForm() {
-      this.editingConsumptionId = null;
-      this.consumptionForm = {
-        date: new Date().toISOString().slice(0, 10),
-        semaine_production: null,
-        type: '',
-        kg: 0,
-        cout: 0,
-        eau_litres: 0,
-        prix_unitaire: 0,
-        prix_eau_unitaire: 25
-      };
-      this.consumptionFormCostPreview = 0;
-    },
+    resetConsumptionForm() { return consommationMethods.resetConsumptionForm(this); },
 
 
-    async deleteConsumption(cons) {
-      const confirmDelete = confirm('Supprimer cette consommation ?');
-      if (!confirmDelete) return;
+    async deleteConsumption(cons) { return await consommationMethods.deleteConsumption(this, cons); },
 
-      try {
-        const response = await fetch(`http://localhost:5000/consommations/${cons.id}`, {
-          method: 'DELETE',
-          credentials: 'include'
-        });
+    // Chatbot methods delegated to helper
+    async analyserElevage() { return await chatbotMethods.analyserElevage(this); },
+    async sendMessage() { return await chatbotMethods.sendMessage(this); },
 
-        if (response.ok) {
-          this.consommations = this.consommations.filter(c => c.id !== cons.id);
-          if (this.editingConsumptionId === cons.id) {
-            this.resetConsumptionForm();
-          }
-          this.updateTrendsFromData();
-          this.calculateKPI();
-          alert('🗑️ Consommation supprimée');
-        } else {
-          const err = await response.json().catch(() => ({ error: 'Erreur inconnue' }));
-          alert(`❌ Erreur : ${err.error || response.statusText}`);
-        }
-      } catch (error) {
-        console.error('💥 Erreur suppression:', error);
-        alert('🌐 Erreur de connexion au serveur');
-      }
-    },
-
-   // Méthode pour analyser l'élevage
-async analyserElevage() {
-  try {
-    this.chatLoading = true;
-    
-    // Appel direct avec gestion d'erreur
-    const response = await fetch('http://localhost:5000/chatbot/analyse_complete', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include'
-    });
-    
-    if (!response.ok) {
-      // Si c'est une erreur 404, le endpoint n'existe pas
-      if (response.status === 404) {
-        throw new Error('Le service d\'analyse n\'est pas disponible. Vérifiez le serveur.');
-      }
-      throw new Error(`Erreur ${response.status}`);
-    }
-    
-    const data = await response.json();
-    
-    // Afficher la réponse
-    this.messages.push({
-      from: 'bot',
-      text: data.analyse || 'Analyse non disponible'
-    });
-    
-  } catch (error) {
-    console.error('Erreur analyse:', error);
-    this.messages.push({
-      from: 'bot',
-      text: `⚠️ Erreur: ${error.message}`
-    });
-  } finally {
-    this.chatLoading = false;
-  }
-},
-
-// Méthode pour envoyer un message
-async sendMessage() {
-  if (!this.chatInput.trim()) return;
-  
-  const message = this.chatInput.trim();
-  this.messages.push({ from: 'user', text: message });
-  this.chatInput = '';
-  this.chatLoading = true;
-  
-  try {
-    const response = await fetch('http://localhost:5000/chatbot/ask', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      credentials: 'include',
-      body: JSON.stringify({
-        message: message,
-        mode: this.chatMode
-      })
-    });
-    
-    const data = await response.json();
-    
-    if (data.error) {
-      throw new Error(data.error);
-    }
-    
-    this.messages.push({ 
-      from: 'bot', 
-      text: data.reponse
-    });
-    
-  } catch (error) {
-    console.error('Erreur chatbot:', error);
-    this.messages.push({ 
-      from: 'bot', 
-      text: `Erreur: ${error.message}` 
-    });
-  } finally {
-    this.chatLoading = false;
-  }
-},
-
-    dismissChatMessage(index) {
-      if (index == null) return;
-      this.messages.splice(index, 1);
-    },
-
-    dismissChatMessage(index) {
-      if (index < 0 || index >= this.messages.length) return;
-      this.messages.splice(index, 1);
-    },
+    dismissChatMessage(index) { return messageMethods.dismissChatMessage(this, index); },
 
     selectTab(tab) {
       this.activeTab = tab;
@@ -4160,109 +3387,12 @@ async sendMessage() {
       return date.toLocaleDateString('fr-FR');
     },
     
-    generatePredictions() {
-      // Vérifier qu'on a des données de base (animaux et mesures)
-      if (!this.band || !this.id) {
-        this.predictions = [];
-        this.predictionErrorMsg = 'Aucune bande sélectionnée : impossible de générer des prédictions.';
-        return;
-      }
-
-      const hasAnimals = (this.band.nombre_initial || 0) > 0 || this.currentAnimals > 0;
-      const hasWeights = this.animalInfos.some(i => i.poids_moyen !== null && i.poids_moyen !== undefined);
-      const hasCons = this.consommations.length > 0;
-
-      if (!hasAnimals || (!hasWeights && !hasCons)) {
-        this.predictions = [];
-        this.predictionErrorMsg = 'Données insuffisantes : ajoutez au moins un poids hebdomadaire ou une consommation pour lancer les prédictions.';
-        return;
-      }
-
-      this.predictionErrorMsg = '';
-      const days = parseInt(this.predictionDays);
-      this.predictions = [];
-      this.totalPredictedProfit = 0;
-      let runningPredCost = 0;
-      
-      // Utiliser les données réelles de la bande
-      const currentWeight = this.getObservedWeightForPredictions();
-      const currentAnimals = this.currentAnimals;
-      const initialAnimals = this.band?.nombre_initial || currentAnimals || 0;
-      // Inclure l'ensemble des coûts connus (consommations + dépenses élémentaires + traitements)
-      const totalCostToDate = this.totalCostsAll;
-
-      // Tendance de mortalité journalière basée sur les données historiques
-      const totalDeaths = this.totalAnimalDeaths || (this.band?.nombre_morts_totaux || 0);
-      const weeksObserved = this.animalAgeWeeks || this.durationWeeks || 1;
-      const avgDeathsPerDay = totalDeaths > 0 ? totalDeaths / Math.max(1, weeksObserved * 7) : 0.15;
-      
-      const today = new Date();
-      
-      for (let i = 1; i <= days; i++) {
-        const date = new Date(today);
-        date.setDate(date.getDate() + i);
-        const dateStr = date.toISOString().slice(0, 10);
-        
-        // Poids projeté
-        const weightIncrease = this.calculateWeightIncrease(i);
-        const predictedWeight = currentWeight * (1 + weightIncrease);
-        
-        // Consommation projetée
-        const avgConsumption = this.calculateAverageConsumption();
-        const predictedConsumption = avgConsumption * (1 + (i * 0.02)); // +2% par jour
-        const predictedCost = predictedConsumption * this.getAverageCostPerKg();
-        runningPredCost += predictedCost;
-
-        // Survie projetée (décès moyens quotidiens)
-        const expectedDeaths = avgDeathsPerDay * i;
-        const survivors = Math.max(0, currentAnimals - expectedDeaths);
-        const survivalRate = initialAnimals ? (survivors / initialAnimals) * 100 : 0;
-
-        // Valeur et marge projetées (marge nette = revenus – (coûts déjà engagés + coûts projetés jusqu'à ce jour))
-        const predictedValue = predictedWeight * this.getPricePerKg() * survivors;
-        const predictedMargin = predictedValue - (totalCostToDate + runningPredCost);
-        
-        this.predictions.push({
-          jour: i,
-          date: dateStr,
-          poids: predictedWeight,
-          consommation: predictedConsumption,
-          cout: predictedCost,
-          valeur: predictedValue,
-          marge: predictedMargin,
-          survivants: survivors,
-          taux_survie: survivalRate
-        });
-        
-      }
-      const best = this.predictions.reduce((max, p) => p.marge > max.marge ? p : max, this.predictions[0]);
-      this.totalPredictedProfit = best?.marge || 0;
-      this.roi = ((best?.marge || 0) / (totalCostToDate || 1)) * 100 || 0;
-      this.optimalSellingDate = this.findOptimalSellingDate();
-    },
+    generatePredictions() { return predictionsMethods.generatePredictions(this); },
     
-    calculateWeightIncrease(day) {
-      // Modèle linéaire unique (3.5%/jour)
-      return 0.035 * day;
-    },
-
-    calculateAverageConsumption() {
-      if (this.consommations.length === 0) return 100;
-      const totalKg = this.consommations.reduce((sum, c) => sum + (c.kg || 0), 0);
-      return totalKg / this.consommations.length;
-    },
-
-    getAverageCostPerKg() {
-      if (this.consommations.length === 0) return 1.8;
-      const totalCost = this.consommations.reduce((sum, c) => sum + (c.cout || 0), 0);
-      const totalKg = this.consommations.reduce((sum, c) => sum + (c.kg || 0), 0);
-      return totalKg > 0 ? totalCost / totalKg : 1.8;
-    },
-
-    getPricePerKg() {
-      // Prix de vente moyen basé sur la race
-      return this.band?.race === 'Poulet de chair' ? 3.5 : 4.0;
-    },
+    calculateWeightIncrease(day) { return predictionsMethods.calculateWeightIncrease(day, this.predictionModel); },
+    calculateAverageConsumption() { return predictionsMethods.calculateAverageConsumptionFrom(this); },
+    getAverageCostPerKg() { return predictionsMethods.getAverageCostPerKgFrom(this); },
+    getPricePerKg() { return predictionsMethods.getPricePerKgFrom(this); },
 
     calendarHighlights(startDate, endDate) {
       const map = new Map();
@@ -4304,19 +3434,8 @@ async sendMessage() {
       return map;
     },
 
-    findOptimalSellingDate() {
-      if (this.predictions.length === 0) return '';
-      // Jour avec marge projetée maximale (meilleur jour de vente)
-      const maxMarginDay = this.predictions.reduce((max, p) => 
-        p.marge > max.marge ? p : max, this.predictions[0]);
-      return maxMarginDay.date;
-    },
-
-    getObservedWeightForPredictions() {
-      const last = this.animalLastWeight;
-      if (last && last.value) return Number(last.value) || 0;
-      return this.band?.poids_moyen_initial || 2.0;
-    },
+    findOptimalSellingDate() { return predictionsMethods.findOptimalSellingDateFrom(this.predictions); },
+    getObservedWeightForPredictions() { return predictionsMethods.getObservedWeightForPredictions(this); },
     
     // Utility methods
     getTrendClass(type) {

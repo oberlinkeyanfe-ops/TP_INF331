@@ -639,6 +639,39 @@ export default {
       const c = this.$refs.waterfall;
       if (!c) return;
       const preds = [...(this.predictions || [])];
+
+      // If we have an optimal day (best margin), use its revenue and predicted costs
+      let best = null;
+      if (preds.length) {
+        best = preds.reduce((b, p) => (p.marge > (b?.marge ?? -Infinity) ? p : b), preds[0]);
+      }
+
+      if (best) {
+        const revenue = Number(best.valeur || 0);
+        const consumptionCost = Number(best.cout || 0);
+        const treatmentCosts = Number(this.$parent?.totalTreatmentCost ?? 0) || 0;
+        const elementaryExpenses = Number(this.$parent?.totalExpensesElementaires ?? 0) || 0;
+
+        const net = revenue - (consumptionCost + treatmentCosts + elementaryExpenses);
+
+        const labels = ['Revenu', 'Consommations', 'Traitements', 'Dépenses élémentaires', 'Marge nette'];
+        const data = [Math.round(revenue), -Math.round(consumptionCost), -Math.round(treatmentCosts), -Math.round(elementaryExpenses), Math.round(net)];
+
+        c.getChartData = () => ({
+          labels,
+          datasets: [{
+            label: 'Waterfall',
+            data,
+            backgroundColor: labels.map(l => l === 'Marge nette' ? '#22C55E' : l === 'Revenu' ? '#0EA5E9' : '#F97316'),
+            borderWidth: 1
+          }]
+        });
+        c.getChartOptions = () => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { stacked: false } } });
+        this.$nextTick(() => c.renderChart());
+        return;
+      }
+
+      // Fallback: aggregate over horizon (previous behavior)
       const totalRevenue = preds.reduce((s, p) => s + (p.valeur || 0), 0);
       const totalCost = preds.reduce((s, p) => s + (p.cout || 0), 0);
       const totalMargin = preds.reduce((s, p) => s + (p.marge || 0), 0);
