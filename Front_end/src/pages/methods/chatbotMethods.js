@@ -16,7 +16,8 @@ export async function analyserElevage(vm) {
     const response = await fetch('http://localhost:5000/chatbot/analyse_complete', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include'
+      credentials: 'include',
+      body: JSON.stringify({ mode: vm.chatMode })
     });
 
     if (!response.ok) {
@@ -26,6 +27,12 @@ export async function analyserElevage(vm) {
 
     const data = await response.json();
     vm.messages.push({ from: 'bot', text: data.analyse || 'Analyse non disponible' });
+
+    // If web results were returned (hybrid/web modes), display a brief summary
+    if (data.web_results && Array.isArray(data.web_results) && data.web_results.length) {
+      const sources = data.web_results.slice(0,3).map(r => `• ${r.title} — ${r.url}`).join('\n');
+      vm.messages.push({ from: 'bot', text: `Sources web utilisées:\n${sources}` });
+    }
   } catch (error) {
     console.error('Erreur analyse:', error);
     vm.messages.push({ from: 'bot', text: `⚠️ Erreur: ${error.message}` });

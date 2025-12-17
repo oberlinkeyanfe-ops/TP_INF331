@@ -13,9 +13,22 @@ from routes.animal_info import animal_info_bp
 app = Flask(__name__)
 
 # Configuration
-app.config['SECRET_KEY'] = 'votre_cle_secrete_tres_longue_et_unique_123456789'
+import os
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'votre_cle_secrete_tres_longue_et_unique_123456789')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=7)
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://avic:1234@localhost:5432/aviculture_db'
+# Prefer DATABASE_URL env var (Postgres) but fallback to a file-based SQLite DB for local dev.
+# If a DATABASE_URL points to Postgres but psycopg2 isn't installed (common on Windows dev),
+# fall back to SQLite to let the dev server run without native build tools.
+db_uri = os.getenv('DATABASE_URL')
+if db_uri and 'postgres' in db_uri:
+    try:
+        import psycopg2  # check availability
+        app.config['SQLALCHEMY_DATABASE_URI'] = db_uri
+    except Exception:
+        app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///dev_local.db'
+else:
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_uri or 'sqlite:///dev_local.db'
+
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialisation
@@ -24,8 +37,8 @@ migrate = Migrate(app, db)
 
 # CORS
 CORS(app, 
-     supports_credentials=True,
-     origins=["http://localhost:5173"])
+    supports_credentials=True,
+    origins=["http://localhost:5173", "http://127.0.0.1:5173", "http://localhost:5173/"])
 
 # Gestion OPTIONS
 @app.before_request
@@ -44,6 +57,19 @@ app.register_blueprint(traitements_bp, url_prefix="/traitements")
 app.register_blueprint(depenses_bp, url_prefix="/depenses")
 app.register_blueprint(chatbot_bp, url_prefix="/chatbot") 
 app.register_blueprint(animal_info_bp, url_prefix="/animal-info")
+from routes.dashboard import dashboard_bp
+app.register_blueprint(dashboard_bp, url_prefix="/dashboard")
+
+# Seed initial bandes (create demo data if missing)
+try:
+    from init_data import seed_initial_bandes
+    # run the seed now (safe to call: it checks for existing records)
+    with app.app_context():
+        res = seed_initial_bandes(app)
+        if res and isinstance(res, dict) and res.get('created'):
+            print(f"🔧 Seed: {res.get('created')} bandes créées lors du démarrage")
+except Exception as e:
+    print(f"⚠️ Seed initialisation failed: {e}")
 
 @app.route('/ping')
 def ping():

@@ -4,7 +4,7 @@
     <header class="navbar">
       <div class="nav-container">
         <div class="brand">
-          <img src="../assets/icons/LOGO.svg" alt="AVIPRO" />
+          <span class= "logo"></span> 
           <span>AVIPRO</span>
         </div>
 
@@ -12,7 +12,7 @@
           <button @click="selectTab('home')" :class="{ active: activeTab === 'home' }">Accueil</button>
           <button @click="selectTab('bands')" :class="{ active: activeTab === 'bands' }">Mes Bandes</button>
           <button @click="selectTab('dashboard')" :class="{ active: activeTab === 'dashboard' }">Tableau de bord</button>
-          <button class="ai" :class="{ active: activeTab === 'chatbot' }" @click="selectTab('chatbot')"></button>
+          <button class="ai" :class="{ active: activeTab === 'chatbot' }" @click="selectTab('chatbot')" ></button>
         </nav>
 
         <div class="nav-profile">
@@ -30,39 +30,12 @@
             </div>
           </div>
 
-            <section v-if="activeTab === 'chatbot'" class="tab-fade chatbot-tab">
-              <h2>Chatbot</h2>
-              <div class="chatbox">
-                <div class="chat-controls">
-                  <div class="chat-mode-head">
-                    <label>Mode IA</label>
-                    <span class="chat-mode-hint">Choisissez la source d'information</span>
-                  </div>
-                  <div class="chat-mode-pills">
-                    <button type="button" class="pill-btn" :class="{ active: chatMode === 'data' }" @click="chatMode = 'data'">Données internes</button>
-                    <button type="button" class="pill-btn" :class="{ active: chatMode === 'hybrid' }" @click="chatMode = 'hybrid'">Hybride</button>
-                    <button type="button" class="pill-btn" :class="{ active: chatMode === 'web' }" @click="chatMode = 'web'">Web uniquement</button>
-                    <button @click="analyserElevage" class="pill-btn" :disabled="chatLoading">📊 Analyser mon élevage</button>
-                  </div>
-                </div>
-                <div class="messages">
-                  <div v-for="(m, i) in messages" :key="i" :class="['msg', m.from]">
-                    <span class="msg-text">{{ m.text }}</span>
-                    <button class="msg-close" aria-label="Fermer" @click="dismissChatMessage(i)">✕</button>
-                  </div>
-                  <div v-if="chatLoading" class="msg bot">…</div>
-                </div>
-                <form @submit.prevent="sendMessage" class="chat-form">
-                  <input v-model="chatInput" placeholder="Poser une question à l'IA" />
-                  <button class="btn" type="submit">Envoyer</button>
-                </form>
-              </div>
-            </section>
+
         </div>
       </div>
     </header>
 
-    <main class="main-container">
+    <main class="main-container dashboard-container theme-green home-dashboard-style">
       
       <div v-if="activeTab === 'home'" class="tab-fade home-tab">
         
@@ -139,7 +112,16 @@
         </section>
       </div>
 
-      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab">
+      <div v-if="activeTab === 'dashboard'" class="tab-fade dashboard-tab ">
+
+
+        <div class="dashboard-container" style="margin-top: 330vh;">
+          
+          <DashboardGlobal ref="dashboardGlobal" />
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab" style="margin-bottom: 0; margin-top: 170vh;">
         <header class="page-header">
           <div>
             <h2>Mes Bandes</h2>
@@ -169,12 +151,53 @@
                 <label>Départ</label>
                 <span>{{ formatDate(band.date_arrivee) }}</span>
               </div>
+              <div>
+                <label>Performance</label>
+                <span :class="{'good-perf': getBandPerformance(band.id) >= 75, 'warn-perf': getBandPerformance(band.id) >= 50 && getBandPerformance(band.id) < 75, 'bad-perf': getBandPerformance(band.id) < 50}">
+                  {{ getBandPerformance(band.id) !== null ? getBandPerformance(band.id) + '%' : '—' }}
+                </span>
+                <button v-if="getBandPerformance(band.id) !== null" class="btn-small" @click.stop="showPerfBreakdown(band.id)">Détails</button>
+              </div>
             </div>
           </div>
           
           <div v-if="bands.length === 0" class="empty-bands">
             <p>Aucune bande enregistrée. Créez la première !</p>
           </div>
+        </div>
+      </div>
+
+      <div v-if="activeTab === 'chatbot'" class="tab-fade chatbot-tab">
+        <header class="page-header">
+          <div>
+            <h2>Chatbot</h2>
+            <p>Dialogue avec l'assistant IA — posez vos questions ou lancez une analyse globale.</p>
+          </div>
+        </header>
+        <div class="chatbox">
+          <div class="chat-controls">
+            <div class="chat-mode-head">
+              <label>Mode IA</label>
+              <span class="chat-mode-hint">Choisissez la source d'information</span>
+            </div>
+            <div class="chat-mode-pills">
+              <button type="button" class="pill-btn" :class="{ active: chatMode === 'data' }" @click="chatMode = 'data'">Données internes</button>
+              <button type="button" class="pill-btn" :class="{ active: chatMode === 'hybrid' }" @click="chatMode = 'hybrid'">Hybride</button>
+              <button type="button" class="pill-btn" :class="{ active: chatMode === 'web' }" @click="chatMode = 'web'">Web uniquement</button>
+              <button @click="analyserElevage" class="pill-btn" :disabled="chatLoading">📊 Analyser mon élevage</button>
+            </div>
+          </div>
+          <div class="messages">
+            <div v-for="(m, i) in messages" :key="i" :class="['msg', m.from]">
+              <span class="msg-text">{{ m.text }}</span>
+              <button class="msg-close" aria-label="Fermer" @click="dismissChatMessage(i)">✕</button>
+            </div>
+            <div v-if="chatLoading" class="msg bot">…</div>
+          </div>
+          <form @submit.prevent="sendMessage" class="chat-form">
+            <input v-model="chatInput" placeholder="Poser une question à l'IA" />
+            <button class="btn" type="submit">Envoyer</button>
+          </form>
         </div>
       </div>
 
@@ -220,14 +243,16 @@
 
 <script>
 // Importation directe des images pour éviter les erreurs de chemin
-// Assure-toi que les fichiers existent dans src/assets/
 import img1 from '../assets/slide/slide1.png';
 import img2 from '../assets/slide/slide2.png';
 import img3 from '../assets/slide/slide3.png';
 import * as chatbotMethods from './methods/chatbotMethods.js';
+import { api } from '../services/api.js';
+import DashboardGlobal from './DashboardGlobal.vue';
 
 export default {
   name: 'Home',
+  components: { DashboardGlobal },
   data() {
     return {
       activeTab: 'home',
@@ -238,6 +263,9 @@ export default {
       bands: [],
       form: { nom_bande: '', date_arrivee: '', race: 'Ross308', fournisseur: '', nombre_initial: 0, statut: 'active' },
       avatarColor: '#6366f1',
+      // Per-band performance mapping (id -> percent)
+      bandPerformanceMap: {},
+      coutsMap: {},
       // Configuration Slides
       slides: [
         { title: 'Suivi de croissance', text: 'Visualisez les courbes de poids.', image: img1 },
@@ -251,6 +279,8 @@ export default {
       messages: [],
       chatMode: 'data',
       chatLoading: false
+      ,
+      // Dashboard global handled by DashboardGlobal component
     };
   },
   computed: {
@@ -266,6 +296,14 @@ export default {
     stopSlideAuto() { clearInterval(this.slideTimer); },
     // UI Helpers
     async fetchBandes() {
+      // Try to show cached results immediately
+      if (!this.bands || !this.bands.length) {
+        const cached = localStorage.getItem('bands_cache');
+        if (cached) {
+          try { this.bands = JSON.parse(cached); } catch (e) { /* ignore */ }
+        }
+      }
+
       this.loadingBands = true;
       this.bandsError = '';
       try {
@@ -277,10 +315,15 @@ export default {
         if (!res.ok) throw new Error(`Erreur HTTP: ${res.status}`);
         const data = await res.json();
         this.bands = Array.isArray(data) ? data : [];
+        // cache for instant reloads
+        try { localStorage.setItem('bands_cache', JSON.stringify(this.bands)); } catch (e) { /* ignore */ }
+
+        // Fetch per-band performance & costs to display on home cards
+        this.fetchBandPerformances().catch(e => console.warn('Erreur fetchBandPerformances:', e));
       } catch (error) {
         console.error('Erreur fetchBandes:', error);
         this.bandsError = 'Impossible de charger les bandes: ' + error.message;
-        this.bands = [];
+        // keep prior cached bands if any
       } finally {
         this.loadingBands = false;
       }
@@ -322,6 +365,7 @@ export default {
     closeAndReset() { this.resetForm(); this.showCreate = false; },
 
     selectTab(t) { this.activeTab = t; if (t === 'bands') this.fetchBandes(); },
+    // Dashboard handled by `DashboardGlobal` component
     toggleDropdown() { this.dropdownOpen = !this.dropdownOpen; },
     formatDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; },
 
@@ -345,13 +389,121 @@ export default {
 
     loadUser() {
       try {
-        const stored = localStorage.getItem('user');
+        // accept both localStorage and sessionStorage so login 'remember' option works
+        const storedLocal = localStorage.getItem('user');
+        const storedSession = sessionStorage.getItem('user');
+        const stored = storedLocal || storedSession;
         this.user = stored ? JSON.parse(stored) : null;
         if (this.user) this.generateRandomColor();
+        return this.user;
       } catch (error) {
         console.error('Erreur loadUser:', error);
         this.user = null;
+        return null;
       }
+    },
+
+    // ---- Performance helpers for Home (per-band)
+    ratioScore(refValue, actualValue) {
+      // Return null when comparison is not meaningful (avoid treating missing data as perfect)
+      if (refValue == null || refValue <= 0) return null;
+      if (actualValue == null || actualValue <= 0) return null;
+      if (actualValue <= refValue) return 100;
+      return Math.max(0, Math.min(100, Math.round((refValue / actualValue) * 100)));
+    },
+
+    async fetchBandPerformances() {
+      try {
+        // authoritative: fetch the precomputed map from backend
+        const resp = await api.get('/dashboard/performance/map');
+        const map = resp && resp.band_performance_map ? resp.band_performance_map : {};
+        this.bandPerformanceMap = map;
+        try { localStorage.setItem('band_performance_map', JSON.stringify(map)); } catch (e) { /* ignore */ }
+      } catch (e) {
+        console.warn('Failed to fetch performance map from backend, leaving existing map in place', e);
+      }
+    },
+
+    getBandPerformance(bandId) {
+      const val = this.bandPerformanceMap && this.bandPerformanceMap[bandId];
+      return typeof val === 'number' ? val : null;
+    },
+
+    loadCachedData() {
+      // Load lightweight cache to make UI instant
+      try {
+        const bandsCache = localStorage.getItem('bands_cache');
+        if (bandsCache) {
+          this.bands = JSON.parse(bandsCache);
+        }
+        const dashCache = localStorage.getItem('dashboard_cache');
+        if (dashCache) {
+          this.dashboardData = JSON.parse(dashCache);
+        }
+        // load precomputed band performance map if available
+        const perfMapRaw = localStorage.getItem('band_performance_map');
+        if (perfMapRaw) {
+          const parsed = JSON.parse(perfMapRaw);
+          if (parsed && typeof parsed === 'object') this.bandPerformanceMap = parsed;
+        }
+      } catch (e) {
+        console.warn('Erreur loading cached data', e);
+      }
+    },
+
+    showPerfBreakdown(bandId) {
+      const components = this.bandPerformanceMap && this.bandPerformanceMap[`components_${bandId}`];
+      const serverVal = this.bandPerformanceMap && this.bandPerformanceMap[bandId];
+      const msg = `Bande ${bandId}\nPerformance: ${serverVal ?? '—'}%\nDétails: ${components ? JSON.stringify(components) : '—'}`;
+      alert(msg);
+    },
+
+    _onStorageChange(e) {
+      if (e.key === 'user') {
+        this.loadUser();
+        if (this.user) {
+          this.loadCachedData();
+          this.fetchBandes();
+          if (this.$refs.dashboardGlobal && this.$refs.dashboardGlobal.fetchDashboardGlobal) this.$refs.dashboardGlobal.fetchDashboardGlobal();
+        }
+      }
+
+      // react to per-band perf updates saved by Bandes.vue
+      if (e.key && e.key.startsWith('band_performance_')) {
+        try {
+          const idStr = e.key.replace('band_performance_', '');
+          const id = Number(idStr);
+          const val = e.newValue ? JSON.parse(e.newValue) : null;
+          if (id && val) {
+            // val might be an object with subscores and performance_percent
+            const perf = typeof val.performance_percent === 'number' ? val.performance_percent : null;
+            if (perf !== null) this.bandPerformanceMap = { ...this.bandPerformanceMap, [id]: perf };
+            if (val.subscores) this.bandPerformanceMap = { ...this.bandPerformanceMap, [`components_${id}`]: val.subscores };
+            console.log('Home detected band performance update from storage', id, perf);
+          }
+        } catch (err) { /* ignore parse errors */ }
+      }
+    },
+
+    _onBandPerfUpdated(e) {
+      try {
+        const detail = e && e.detail;
+        if (!detail) return;
+        const id = Number(detail.id);
+        const performance = detail.performance;
+        if (!id || !performance) return;
+        const perf = typeof performance.performance_percent === 'number' ? performance.performance_percent : null;
+        if (perf !== null) this.bandPerformanceMap = { ...this.bandPerformanceMap, [id]: perf };
+        if (performance.subscores) this.bandPerformanceMap = { ...this.bandPerformanceMap, [`components_${id}`]: performance.subscores };
+        // persist merged map to localStorage
+        try {
+          const existing = localStorage.getItem('band_performance_map');
+          const parsed = existing ? JSON.parse(existing) : {};
+          const merged = { ...(parsed || {}), ...(this.bandPerformanceMap || {}) };
+          localStorage.setItem('band_performance_map', JSON.stringify(merged));
+        } catch (err) { /* ignore storage errors */ }
+        console.log('Home detected band performance update via event', id, perf);
+      } catch (err) { /* ignore */ }
     },
 
     generateRandomColor() {
@@ -372,9 +524,21 @@ export default {
     this._closeDropdownHandler = () => { this.dropdownOpen = false; };
     document.addEventListener('click', this._closeDropdownHandler);
     this.startSlideAuto();
+    // on mount, load data immediately for a snappy UX
     if (this.activeTab === 'bands') this.fetchBandes();
+    // Load bands and dashboard immediately if user present
+    if (this.user) {
+      // use cached values first for instant UI, then refresh in background
+      this.loadCachedData();
+      // run both in parallel. DashboardGlobal is a child component; call its method if present
+      const dashPromise = (this.$refs.dashboardGlobal && this.$refs.dashboardGlobal.fetchDashboardGlobal) ? this.$refs.dashboardGlobal.fetchDashboardGlobal() : Promise.resolve();
+      Promise.all([this.fetchBandes(), dashPromise]).catch(err => console.warn('Background refresh error', err));      // Also ensure band performance map is refreshed from server to avoid stale 100% values
+      this.fetchBandPerformances().catch(e => console.warn('Failed refresh band performances:', e));    }
+    window.addEventListener('storage', this._onStorageChange);
+    // Listen for same-tab perf updates
+    window.addEventListener('bandPerformanceUpdated', this._onBandPerfUpdated);
   },
-  beforeUnmount() { document.removeEventListener('click', this._closeDropdownHandler); this.stopSlideAuto(); }
+  beforeUnmount() { document.removeEventListener('click', this._closeDropdownHandler); window.removeEventListener('storage', this._onStorageChange); window.removeEventListener('bandPerformanceUpdated', this._onBandPerfUpdated); this.stopSlideAuto(); }
 };
 </script>
 <style src="../../css/home.css"></style>

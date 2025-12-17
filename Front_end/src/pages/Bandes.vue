@@ -28,12 +28,7 @@
           </button> 
         </span>
 
-        <span class="logo-section">
-          <img src="../assets/icons/kpi.svg"/>
-          <button :class="{ active: activeTab === 'kpi' }" @click="selectTab('kpi')">
-            KPIs
-          </button> 
-        </span>
+        
 
         <span class="logo-section">
           <img src="../assets/icons/sante.svg"/>
@@ -170,11 +165,12 @@
               </div>
             </div>
             <div class="hero-right">
-              <PerformanceGauge :score="productivityScore" />
+              <PerformanceGauge :score="performancePercent" />
               <div class="hero-legend">
-                <span class="dot good"></span><small>Poids & survie</small>
-                <span class="dot warn"></span><small>Coûts</small>
+                <span class="dot good"></span><small>Survie</small>
+                <span class="dot warn"></span><small>Gains & Conso</small>
               </div>
+              <button v-if="serverPerformance" class="btn-small" @click.stop="showBandPerfDetails">Détails perf</button>
             </div>
           </div>
 
@@ -809,17 +805,6 @@
           </div>
         </section>
 
-        <!-- KPIs Tab -->
-        <section v-if="activeTab === 'kpi'" class="tab-panel kpi-panel">
-          <KPIDashboard 
-            :band-data="band"
-            :consommation-data="consommations"
-            :animal-infos="animalInfos"
-            :expense-records="expenseRecords"
-            :treatment-records="treatmentRecords"
-            v-if="band"
-          />
-        </section>
 
         <!-- Chatbot Tab -->
         <section v-if="activeTab === 'chatbot'" class="tab-panel chatbot-panel">
@@ -1741,6 +1726,9 @@ export default {
       consumptionFormCostPreview: 0,
       filledWeeks: new Map(),
 
+      // server-side performance object for this band
+      serverPerformance: null,
+
       animaux: [],
       animalInfos: [],
       animalInfoForm: {
@@ -2496,9 +2484,65 @@ export default {
     },
     
     productivityScore() {
-      const weightScore = (this.band?.poids_moyen_initial || 0) * 10;
-      const mortalityScore = 100 - this.mortalityRate;
-      return Math.round((weightScore + mortalityScore) / 2);
+      // Combine survival and weight attainment into a stable 0-100 score
+      const survival = Number(this.survivalPerformance || 0);
+      const actualWeight = this.animalLastWeight?.value || null;
+      const weightWeek = this.animalLastWeight?.week || this.currentProductionWeek || null;
+      const refObj = (this.weightReference || []).find(r => r.week === weightWeek);
+      const refWeight = refObj ? ((refObj.low + refObj.high) / 2) : null;
+      const weightScore = (refWeight && actualWeight) ? this.ratioScore(refWeight, actualWeight) : 50; // default neutral
+      return Math.round((survival + weightScore) / 2);
+    },
+
+    // Global consolidated performance for the current bande (0-100)
+    performancePercent() {
+      // Prefer localStorage precomputed map first
+      try {
+        const raw = localStorage.getItem('band_performance_map');
+        if (raw) {
+          const map = JSON.parse(raw);
+          if (map && typeof map === 'object') {
+            const val = map[this.id];
+            if (typeof val === 'number') return val;
+            // allow legacy components_xxx
+            const compKey = `components_${this.id}`;
+            if (map[compKey] && typeof map[compKey] === 'object' && typeof map[compKey].cost === 'number') {
+              // compute average of subscores if present
+              const subs = Object.values(map[compKey]).filter(v => typeof v === 'number');
+              if (subs.length) return Math.round(subs.reduce((a, b) => a + b, 0) / subs.length);
+            }
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+
+      // Prefer server-side computed performance if available
+      if (this.serverPerformance && typeof this.serverPerformance.performance_percent === 'number') {
+        return this.serverPerformance.performance_percent;
+      }
+
+      // No client-side global performance calculation — rely on backend/localStorage map
+      try {
+        const raw = localStorage.getItem('band_performance_map');
+        if (raw) {
+          const map = JSON.parse(raw);
+          if (map && typeof map === 'object') {
+            const val = map[this.id];
+            if (typeof val === 'number') return val;
+            const compKey = `components_${this.id}`;
+            if (map[compKey] && typeof map[compKey] === 'object') {
+              const subs = Object.values(map[compKey]).filter(v => typeof v === 'number');
+              if (subs.length) return Math.round(subs.reduce((a, b) => a + b, 0) / subs.length);
+            }
+          }
+        }
+      } catch (e) { /* ignore parse errors */ }
+
+      if (this.serverPerformance && typeof this.serverPerformance.performance_percent === 'number') {
+        return this.serverPerformance.performance_percent;
+      }
+
+      // Unknown: return 0 (explicit) rather than computing locally to avoid divergence
+      return 0;
     },
 
     recentConsumptions() {
@@ -2708,15 +2752,41 @@ export default {
 
       const consValues = ratios.map(r => r.consScore).filter(v => v !== null);
       const costValues = ratios.map(r => r.costScore).filter(v => v !== null);
-      const consAvg = consValues.length ? this.average(consValues) : 0;
-      const costAvg = costValues.length ? this.average(costValues) : 0;
-      const overall = consValues.length || costValues.length ? Math.round((consAvg + costAvg) / 2) : 0;
+      const consAvg = consValues.length ? this.average(consValues) : null;
+      const costAvg = costValues.length ? this.average(costValues) : null;
+      const overall = (consAvg !== null || costAvg !== null) ? Math.round(((consAvg || 0) + (costAvg || 0)) / ((consAvg !== null && costAvg !== null) ? 2 : 1)) : null;
+
+      // Expose ref total cost for other metrics (treatments / elementary expenses)
+      this._lastRefCostTotal = refCost.reduce((s, v) => s + (Number(v) || 0), 0);
 
       return {
-        consumption: Math.round(consAvg),
-        cost: Math.round(costAvg),
-        overall: overall
+        consumption: consAvg !== null ? Math.round(consAvg) : null,
+        cost: costAvg !== null ? Math.round(costAvg) : null,
+        overall: overall,
+        hasConsumptionData: consValues.length > 0,
+        hasCostData: costValues.length > 0
       };
+    },
+
+
+    // Aggregate reference cost (sum of weekly reference costs calculated in consumptionPerformance)
+    refTotalCost() {
+      // Try to reuse cached computation from consumptionPerformance
+      if (typeof this._lastRefCostTotal === 'number') return this._lastRefCostTotal;
+
+      // Fallback: compute similar to consumptionPerformance
+      const duration = this.durationWeeks;
+      const avgFeedPrice = this.averageUnitPrice('aliment');
+      const avgWaterPrice = this.averageUnitPrice('eau');
+      const ref = this.consumptionReference || [];
+      let total = 0;
+      for (let i = 0; i < duration; i += 1) {
+        const refWeek = ref.find(r => r.week === i + 1);
+        if (!refWeek) continue;
+        const rc = (avgFeedPrice || 0) * (refWeek.aliment_kg || 0) + (avgWaterPrice || 0) * (refWeek.eau_litres || 0);
+        total += rc;
+      }
+      return total;
     },
 
     monthCalendar() {
@@ -3040,6 +3110,12 @@ export default {
 
     formatPercent(val) { return tabUtils.formatPercent(val); },
 
+    showBandPerfDetails() {
+      const perf = this.serverPerformance || {};
+      const msg = `Performance: ${perf.performance_percent ?? '—'}%\nSubscores: ${perf.subscores ? JSON.stringify(perf.subscores) : '—'}`;
+      alert(msg);
+    },
+
     updateCostPreview() { return consommationMethods.updateCostPreview(this); },
 
     averageUnitPrice(type) {
@@ -3051,9 +3127,11 @@ export default {
     },
 
     ratioScore(refValue, actualValue) {
-      if (!refValue || !actualValue) return 0;
+      // Return null when comparison is not meaningful (avoid treating missing data as perfect)
+      if (refValue == null || refValue <= 0) return null;
+      if (actualValue == null || actualValue <= 0) return null;
       if (actualValue <= refValue) return 100;
-      return Math.max(0, Math.min(100, (refValue / actualValue) * 100));
+      return Math.max(0, Math.min(100, Math.round((refValue / actualValue) * 100)));
     },
 
     average(arr) {
@@ -3212,6 +3290,40 @@ export default {
           // Mettre à jour les trends avec des données réelles
           this.updateTrendsFromData();
           
+          // Fetch server-side performance for this band and use it when available
+          try {
+            const perfResp = await fetch(`http://localhost:5000/dashboard/bande/details/${this.id}`, { credentials: 'include' });
+            if (perfResp.ok) {
+              const perfJson = await perfResp.json().catch(() => null);
+              if (perfJson && perfJson.performance) {
+                this.serverPerformance = perfJson.performance;
+                try { localStorage.setItem(`band_performance_${this.id}`, JSON.stringify(this.serverPerformance)); } catch (e) { /* ignore */ }
+                // Also merge into global map stored in localStorage so Home and others read the same values
+                try {
+                  const existing = localStorage.getItem('band_performance_map');
+                  const parsed = existing ? JSON.parse(existing) : {};
+                  const perfValue = typeof this.serverPerformance.performance_percent === 'number' ? this.serverPerformance.performance_percent : null;
+                  const merged = { ...(parsed || {}) };
+                  if (perfValue !== null) merged[this.id] = perfValue;
+                  if (this.serverPerformance.subscores) merged[`components_${this.id}`] = this.serverPerformance.subscores;
+                  localStorage.setItem('band_performance_map', JSON.stringify(merged));
+                } catch (e) { /* ignore */ }
+                // Dispatch a custom event so same-tab listeners (Home) can react immediately
+                try { window.dispatchEvent(new CustomEvent('bandPerformanceUpdated', { detail: { id: this.id, performance: this.serverPerformance } })); } catch (e) { /* ignore */ }
+                // Also warn if local cached map (Home) has a different value
+                try {
+                  const cached = localStorage.getItem(`band_performance_${this.id}`);
+                  if (cached) {
+                    const parsed = JSON.parse(cached);
+                    console.log('Server performance cached for band', this.id, parsed);
+                  }
+                } catch (e) { /* ignore */ }
+              }
+            }
+          } catch (e) {
+            console.warn('Erreur fetch server performance:', e);
+          }
+
           console.log('Band data loaded from DB:', bandData);
         }
       } catch (error) {
@@ -3319,6 +3431,10 @@ export default {
 
     async loadConsommations() { return await consommationMethods.loadConsommations(this); },
 
+    async loadTreatmentsFromServer() { return await traitementsMethods.fetchTreatmentRecordsFromServer(this); },
+
+    async loadExpensesFromServer() { return await depensesMethods.fetchExpenseRecordsFromServer(this); },
+
     async fetchTabData(tab) {
       // Éviter les appels en double
       if (this._fetchingTab === tab) {
@@ -3336,13 +3452,19 @@ export default {
 
         const wantsConsommations = ['consommation', 'dashboard', 'finances', 'kpi', 'predictions'].includes(tab);
         const wantsAnimalInfos = ['animaux', 'finances', 'dashboard', 'kpi', 'predictions'].includes(tab);
+        const wantsTreatments = ['sante', 'dashboard', 'kpi', 'finances'].includes(tab);
+        const wantsExpenses = ['finances', 'dashboard', 'kpi'].includes(tab);
 
         const tasks = [];
         const shouldFetchCons = wantsConsommations && (tab === 'consommation' || this.consommations.length === 0);
         const shouldFetchAnimals = wantsAnimalInfos && (tab === 'animaux' || this.animalInfos.length === 0);
+        const shouldFetchTreatments = wantsTreatments && (tab === 'sante' ? (this.santeSubTab === 'traitements' || this.treatmentRecords.length === 0) : this.treatmentRecords.length === 0);
+        const shouldFetchExpenses = wantsExpenses && (tab === 'finances' ? (this.financeSubTab === 'depenses' || this.expenseRecords.length === 0) : this.expenseRecords.length === 0);
 
         if (shouldFetchCons) tasks.push(this.loadConsommations());
         if (shouldFetchAnimals) tasks.push(this.loadAnimalInfos());
+        if (shouldFetchTreatments) tasks.push(this.loadTreatmentsFromServer());
+        if (shouldFetchExpenses) tasks.push(this.loadExpensesFromServer());
 
         if (tasks.length) {
           await Promise.all(tasks);

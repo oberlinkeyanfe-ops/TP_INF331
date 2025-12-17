@@ -10,10 +10,10 @@ DepenseElt = depense_elt
 
 
 @depenses_bp.before_request
-@login_required
 def require_login():
-    """Vérifie l'authentification pour toutes les routes."""
-    pass
+    """Vérifie l'authentification pour toutes les routes (session-based)."""
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
 
 
 @depenses_bp.route('/')

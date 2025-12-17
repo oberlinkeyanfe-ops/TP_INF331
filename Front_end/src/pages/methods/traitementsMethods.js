@@ -48,3 +48,24 @@ export function loadTreatmentRecordsFromStorage(vm) {
     vm.treatmentRecords = [];
   }
 }
+
+export async function fetchTreatmentRecordsFromServer(vm) {
+  try {
+    if (!vm.id) return;
+    const resp = await fetch(`http://localhost:5000/traitements/bande/${vm.id}`, { credentials: 'include' });
+    if (!resp.ok) {
+      console.warn('Fetch traitements failed', resp.status);
+      return;
+    }
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      vm.treatmentRecords = data;
+    } else if (data.traitements) {
+      vm.treatmentRecords = data.traitements;
+    }
+    // persist locally for offline edits
+    localStorage.setItem(treatmentStorageKey(vm), JSON.stringify(vm.treatmentRecords));
+  } catch (e) {
+    console.warn('Erreur fetch traitements', e);
+  }
+}

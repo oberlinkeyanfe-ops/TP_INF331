@@ -3,10 +3,11 @@
    ========================================= */
 /* placeholder to keep CSS lint happy */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "./band.css";
 :root {
   --font-family: 'Inter', 'Segoe UI', Roboto, 'Helvetica Neue', Arial, system-ui, -apple-system, sans-serif;
   /* Palette de couleurs "Avipro" */
-  --primary: #0f172a;       /* Bleu nuit profond (Autorité/Tech) */
+  --primary: #10b981;       /* Bleu nuit profond (Autorité/Tech) */
   --primary-light: #334155;
   --accent: #2563eb;        /* Bleu vif (Actions) */
   --success: #10b981;       /* Vert (Croissance/Santé) */
@@ -15,7 +16,7 @@
   
   --bg-body: #f1f5f9;       /* Gris très clair (Fond Dashboard) */
   --bg-card: #ffffff;       /* Blanc pur */
-  --text-main: #1e293b;     /* Texte sombre */
+  --text-main: #323532;     /* Texte sombre */
   --text-muted: #64748b;    /* Texte gris */
   
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
@@ -29,6 +30,11 @@
   --text-dark: var(--text-main);
   --shadow-card: var(--shadow-md);
   --border-radius-card: 12px;
+
+  .theme-green {
+   --primary-dark: #059669; 
+  --bg-page: #f0fdf4; --text-main: #064e3b; --text-sec: #374151; --border: #e5e7eb;
+}
 }
 
 * {
@@ -58,7 +64,6 @@ button {
   font-family: inherit;
   cursor: pointer;
   border: none;
-  background: none;
 }
 
 /* =========================================
@@ -79,7 +84,7 @@ button {
 }
 
 .home-tab{
-  margin-top: 100vh;
+  margin-top: 100vh; /* reduce huge space so content appears immediately */
 }
 /* Animations de transition entre onglets */
 .tab-fade {
@@ -96,18 +101,19 @@ button {
    ========================================= */
 .navbar {
   background: var(--bg-card);
+  background-color: #21472a;
   height: var(--header-height);
   border-bottom: 1px solid #e2e8f0;
   position: sticky;
+  color: white;
   top: 0;
   z-index: 100;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 10px 15px 30px rgba(208, 210, 214, 0.751);
 }
 
 .nav-container {
-  /* NOUVEAU : Utilisation de Grid pour un alignement central précis */
-  display: grid;
-  grid-template-columns: 1fr auto 1fr; /* 1fr | Liens Centrés | 1fr */
+  display: flex;
+  justify-content: space-between;
   align-items: center;
   height: 100%;
   max-width: 1280px;
@@ -119,32 +125,41 @@ button {
   /* MODIFIÉ : Taille du logo (texte) augmentée */
   display: flex;
   align-items: center;
-  gap: 12px; 
+  gap: 0;
   font-weight: 700;
   font-size: 1.5rem; /* Augmenté */
   color: var(--primary);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
 
-.brand img {
-  height: 40px; /* MODIFIÉ : Taille de l'image du logo augmentée */
+.logo {
+  width: 50px;
+  height: 50px;
+  background-image: url('../src/assets/icons/LOGO.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
 }
 
 .nav-links {
-  /* Centrage des liens */
   display: flex;
-  justify-content: center; /* Centrage dans la colonne GRID */
-  gap: 2.5rem; /* Espacement plus grand entre les boutons */
+  justify-content: center;
+  gap: 3rem;
   height: 100%;
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 30px;
 }
 
 .nav-links button {
   height: 100%;
   padding: 0 0.5rem;
-  color: var(--text-muted);
-  font-weight: 500;
+  font-family: inherit;
+  color: rgb(213, 195, 195);
   position: relative;
   transition: color 0.2s;
-  font-size: 1rem;
+  font-size: 1.2rem;
 }
 
 .nav-links button:hover {
@@ -155,15 +170,35 @@ button {
   color: var(--accent);
 }
 
-.nav-links button.active::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 100%;
-  height: 3px;
-  background-color: var(--accent);
-  border-radius: 3px 3px 0 0;
+.nav-links button.ai {
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.2rem;
+  border: none;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+}
+
+
+.ai{
+  margin-top: 24px;
+  background-image: url('../src/assets/icons/ai.svg');
+  background-color:  white;
+
+}
+
+.nav-links button.ai:hover {
+  background-image: url('../src/assets/icons/ai.svg');
+  transform: scale(1.05);
+}
+
+.nav-links button.ai.active {
+  box-shadow: 0 0 0 2px var(--accent);
 }
 
 /* Profil & Dropdown */
@@ -299,6 +334,11 @@ button {
   gap: 1rem;
   margin-bottom: 3rem;
 }
+
+/* Performance label colors */
+.good-perf { color: #10b981; font-weight: 700; }
+.warn-perf { color: #f59e0b; font-weight: 700; }
+.bad-perf { color: #ef4444; font-weight: 700; }
 
 .btn-primary, .btn-secondary {
   padding: 0.75rem 1.5rem;
@@ -717,6 +757,7 @@ input:focus, select:focus {
 @media (max-width: 768px) {
     /* MODIFIÉ pour la navbar responsive */
     .nav-container {
+        display: grid;
         grid-template-columns: 1fr 1fr;
         justify-content: space-between;
     }
@@ -726,7 +767,7 @@ input:focus, select:focus {
     }
 
     .brand img {
-        height: 35px;
+        height: 40px;
     }
 
     .nav-links { 
@@ -790,14 +831,116 @@ input:focus, select:focus {
 .messages {
   flex-grow: 1;
   overflow-y: auto;
-  padding: 20px;
+  padding: 12px; /* réduit le padding pour gagner de l'espace */
   background: #f8f9fa;
   border-radius: var(--border-radius-card);
-  margin-bottom: 20px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+  max-height: 270px;
+  max-width: 200vw; /* limite la hauteur de la zone de messages */
 }
+
+/* =========================================
+   DASHBOARD GLOBAL (Styles ajoutées)
+   ========================================= */
+.dashboard-wrapper { width: 100%; margin-top: 1rem; }
+ .dashboard-tab { margin-top: 200vh; }
+.dashboard-tab .page-header { margin-bottom: 0.75rem; }
+.dashboard-grid { display: grid; gap: 1rem; }
+
+/* Apply dashboard theme (colors, background, font) to Home page */
+.home-dashboard-style {
+  /* Use same CSS variables as dashboard theme-green */
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-page); /* light greenish page bg */
+  color: var(--text-sec);
+  padding: 18px 1.5rem; /* similar spacing to dashboard */
+  border-radius: 12px;
+  box-shadow: 0 6px 18px rgba(16,185,129,0.06);
+}
+
+/* Avoid applying dashboard's large top margin inside Home */
+.home-dashboard-style.dashboard-container { margin-top: 0; min-height: auto; }
+
+/* Ensure inner headings use dashboard colors */
+.home-dashboard-style h1, .home-dashboard-style h2, .home-dashboard-style h3 { color: var(--text-main); font-family: 'Inter', sans-serif; }
+.home-dashboard-style .subtitle { color: #6b7280; }
+
+/* Hero adjustments */
+.home-dashboard-style .hero-content h1 { font-size: 2.8rem; font-weight: 800; color: var(--text-main); }
+.home-dashboard-style .hero-desc { color: var(--text-sec); }
+.home-dashboard-style .badge { background: #d1fae5; color: var(--primary); }
+.home-dashboard-style .hero-slider-wrapper { background: white; border-radius: 12px; box-shadow: 0 6px 18px rgba(16,185,129,0.06); }
+
+/* Buttons use dashboard primary style */
+.home-dashboard-style .btn-primary, .home-dashboard-style .btn-secondary {
+  padding: 0.75rem 1.25rem;
+  border-radius: 10px;
+  font-weight: 700;
+}
+.home-dashboard-style .btn-primary { background-color: var(--primary); color: white; box-shadow: 0 4px 14px rgba(16,185,129,0.15); }
+.home-dashboard-style .btn-secondary { background: white; border: 1px solid #e5e7eb; color: var(--text-main); }
+
+/* Feature cards adopt dashboard card look */
+.home-dashboard-style .feature-card { background: white; border-radius: 12px; padding: 16px; box-shadow: 0 6px 12px rgba(0,0,0,0.04); }
+.home-dashboard-style .feature-card h3 { color: var(--text-main); }
+
+/* Bands grid/cards styling */
+.home-dashboard-style .bands-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+.home-dashboard-style .band-card { background: white; border-radius: 12px; padding: 14px; box-shadow: 0 6px 12px rgba(0,0,0,0.04); cursor: pointer; transition: transform 0.15s; }
+.home-dashboard-style .band-card:hover { transform: translateY(-4px); }
+.home-dashboard-style .band-top .band-name { color: var(--text-main); font-weight: 700; }
+.home-dashboard-style .status-badge { font-weight: 700; }
+
+/* Chatbot box adaptation */
+.home-dashboard-style .chatbox { background: white; border-radius: 12px; padding: 12px; box-shadow: 0 6px 12px rgba(0,0,0,0.04); }
+.home-dashboard-style .chat-controls { background: transparent; margin-bottom: 8px; }
+
+/* Mini-stats / KPIs at top of Home */
+.home-dashboard-style .mini-stats { border-top: none; padding-top: 12px; }
+.home-dashboard-style .stat strong { color: var(--text-main); }
+
+/* Ensure consistent font scaling on Home */
+.home-dashboard-style { font-size: 14px; }
+.home-dashboard-style .hero-content h1 { font-size: 32px; }
+
+/* Small responsive tweak: reduce border-radius on small screens */
+@media (max-width: 768px) {
+  .home-dashboard-style { border-radius: 6px; padding: 12px; }
+  .home-dashboard-style .sub-grid-2 { grid-template-columns: 1fr; }
+  .home-dashboard-style .hero-content h1 { font-size: 24px; }
+}
+.kpis { display:flex; gap:1rem; flex-wrap:wrap; padding: 0.5rem 0; }
+.kpi-card { background: var(--bg-card); padding:1rem 1.25rem; border-radius:10px; box-shadow: var(--shadow-card); min-width:150px; border:1px solid #eef2f7 }
+.kpi-card .kpi-value { display:block; font-size:1.4rem; color:var(--primary); font-weight:800 }
+.kpi-card .kpi-label { color:var(--text-muted); text-transform:uppercase; font-size:12px; letter-spacing:0.04em }
+
+/* Reuse the card-head style used in Bandes.vue for chart titles */
+.card-head h3 { margin:0; font-size:16px; color:var(--primary); }
+.chart-note { color:var(--text-muted); font-size:13px; margin-top:6px }
+
+.charts { display:grid; grid-template-columns: repeat(3, 1fr); gap:1rem; margin-top: 0.75rem; }
+.chart-card { background: var(--bg-card); padding: 14px; border-radius: 12px; box-shadow: var(--shadow-card); border:1px solid #eef2f7 }
+.chart-card .card-head { margin-bottom: 8px }
+.chart-wrapper { height: 260px; position: relative }
+
+.chart-item-clickable { cursor: pointer; transition: transform 0.15s ease; }
+.chart-item-clickable:hover { transform: translateY(-4px); box-shadow: 0 10px 30px rgba(2,6,23,0.08); }
+
+/* Responsive: empilement sur mobile */
+@media (max-width: 1000px) {
+  .charts { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 700px) {
+  .charts { grid-template-columns: 1fr; }
+  .kpis { justify-content: space-between; }
+}
+
+/* Small helpers */
+.muted { color: var(--text-muted); }
+.chip-small { display:inline-block; padding:4px 8px; border-radius:8px; background:#f8fafc; border:1px solid #edf2ff; font-size:12px }
 .msg { padding: 10px 15px; border-radius: 20px; max-width: 70%; position: relative; }
 .msg-text { display: inline-block; }
 .msg-close { position: absolute; top: 6px; right: 10px; border: none; background: transparent; color: inherit; opacity: 0.5; cursor: pointer; }

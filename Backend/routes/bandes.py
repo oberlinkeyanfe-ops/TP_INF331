@@ -1,11 +1,22 @@
-from flask import Blueprint, request, jsonify, session
+from flask import Blueprint, request, jsonify, session, current_app
 from modeles.models import db, Bande
 from datetime import datetime, date
 from sqlalchemy import or_, func
 import csv
 import io
 
+# Import the seed helper (safe to import in runtime)
+try:
+    from init_data import seed_initial_bandes
+except Exception:
+    # Fallback absolute import if package layout requires it
+    try:
+        from Backend.init_data import seed_initial_bandes
+    except Exception:
+        seed_initial_bandes = None
+
 bandes_bp = Blueprint('bandes', __name__)
+
 
 # ⭐ PAS besoin de décorateurs - le middleware global dans app.py gère l'auth
 
@@ -30,6 +41,62 @@ def bandes_page():
 
        
         return jsonify([b.to_dict() for b in bandes])
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bandes_bp.route('/seed', methods=['POST', 'GET'])
+def seed_bandes():
+    """Trigger seeding of sample bandes (dev helper).
+    - Safe to call in dev. Returns created count and diagnostics.
+    - If user is logged in (session eleveur_id) it seeds for that user.
+    - Accepts query param `email` to seed for a specific email.
+    """
+    if seed_initial_bandes is None:
+        return jsonify({'error': 'Seed helper not available'}), 500
+
+    # If user is logged in, seed for their account
+    try:
+        eleveur_id = session.get('eleveur_id')
+        email_param = request.args.get('email')
+        if eleveur_id:
+            res = seed_initial_bandes(current_app, eleveur_id=eleveur_id)
+            return jsonify(res)
+        elif email_param:
+            res = seed_initial_bandes(current_app, target_email=email_param)
+            return jsonify(res)
+        else:
+            # fallback: seed for first eleveur (same as before)
+            res = seed_initial_bandes(current_app)
+            return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bandes_bp.route('/seed-full', methods=['POST', 'GET'])
+def seed_full():
+    """Seed full time series and records for an eleveur (dev helper).
+    - Query param: ?eleveur=2 or seed for session eleveur if logged in.
+    """
+    if 'eleveur_id' in session:
+        target = session.get('eleveur_id')
+    else:
+        try:
+            target = int(request.args.get('eleveur')) if request.args.get('eleveur') else None
+        except Exception:
+            target = None
+
+    if not target:
+        return jsonify({'error': 'eleveur id required (session or ?eleveur=ID)'}), 400
+
+    if 'seed_initial_bandes' not in globals():
+        return jsonify({'error': 'Seed helper not available'}), 500
+
+    try:
+        # import the seed_full function from init_data
+        from init_data import seed_full_for_eleveur
+        res = seed_full_for_eleveur(current_app, target)
+        return jsonify(res)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

@@ -25,6 +25,26 @@ export function loadExpenseRecordsFromStorage(vm) {
   }
 }
 
+export async function fetchExpenseRecordsFromServer(vm) {
+  try {
+    if (!vm.id) return;
+    const resp = await fetch(`http://localhost:5000/depenses/bande/${vm.id}`, { credentials: 'include' });
+    if (!resp.ok) {
+      console.warn('Fetch depenses failed', resp.status);
+      return;
+    }
+    const data = await resp.json();
+    if (Array.isArray(data)) {
+      vm.expenseRecords = data;
+    } else if (data.depenses) {
+      vm.expenseRecords = data.depenses;
+    }
+    localStorage.setItem(expenseStorageKey(vm), JSON.stringify(vm.expenseRecords));
+  } catch (e) {
+    console.warn('Erreur fetch depenses', e);
+  }
+}
+
 export function saveExpense(vm) {
   if (!vm.expenseForm.tache || !vm.expenseForm.date || !vm.expenseForm.montant) return;
   const payload = { ...vm.expenseForm, montant: Number(vm.expenseForm.montant), label: vm.expenseForm.tache, id: crypto.randomUUID() };

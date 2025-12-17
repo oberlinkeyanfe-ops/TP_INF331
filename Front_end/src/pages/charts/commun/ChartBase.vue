@@ -26,6 +26,42 @@ if (Chart.defaults.transitions?.active) {
   Chart.defaults.transitions.active.animation = false;
 }
 
+// Apply theme defaults from CSS variables (to match styles in band.css)
+function getCssVar(name, fallback) {
+  try {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(name);
+    return (v && v.trim()) || fallback;
+  } catch (e) {
+    return fallback;
+  }
+}
+const CSS_FONT = getCssVar('--font-family', 'Inter, system-ui, -apple-system, sans-serif');
+const CSS_TEXT_MAIN = getCssVar('--text-main', '#111827');
+const CSS_TEXT_MUTED = getCssVar('--text-muted', '#64748b');
+const CSS_BG_CARD = getCssVar('--bg-card', '#ffffff');
+const CSS_BORDER_COLOR = getCssVar('--border-color', '#e6edf7');
+const CSS_GRID_COLOR = getCssVar('--border-color', '#e6edf7');
+const CSS_PRIMARY = getCssVar('--primary', '#0f172a');
+const CSS_PRIMARY_ACCENT = getCssVar('--primary-accent', '#6f42c1'); // band.css main action color
+
+// Chart.js sensible defaults inspired by band.css
+Chart.defaults.font.family = CSS_FONT;
+Chart.defaults.font.size = 13;
+Chart.defaults.color = CSS_TEXT_MAIN;
+Chart.defaults.plugins.legend = Chart.defaults.plugins.legend || {};
+Chart.defaults.plugins.legend.labels = Chart.defaults.plugins.legend.labels || {};
+Chart.defaults.plugins.legend.labels.color = CSS_TEXT_MUTED;
+Chart.defaults.plugins.legend.labels.font = { family: CSS_FONT, size: 12 };
+Chart.defaults.plugins.tooltip = Chart.defaults.plugins.tooltip || {};
+Chart.defaults.plugins.tooltip.backgroundColor = CSS_BG_CARD;
+Chart.defaults.plugins.tooltip.titleColor = CSS_TEXT_MAIN;
+Chart.defaults.plugins.tooltip.bodyColor = CSS_TEXT_MAIN;
+Chart.defaults.plugins.tooltip.borderColor = CSS_BORDER_COLOR;
+Chart.defaults.plugins.tooltip.borderWidth = 1;
+Chart.defaults.elements.line.borderWidth = 2;
+Chart.defaults.elements.point.radius = 3;
+Chart.defaults.elements.point.hoverRadius = 5;
+
 export default {
   name: 'ChartBase',
   
@@ -84,6 +120,37 @@ export default {
         animation: false
       };
     },
+
+    // Merge user options with base themed options
+    _mergeOptions(userOptions = {}) {
+      const base = {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        plugins: {
+          legend: { labels: { color: CSS_TEXT_MUTED, font: { family: CSS_FONT, size: 12 } } },
+          tooltip: { backgroundColor: CSS_BG_CARD, titleColor: CSS_TEXT_MAIN, bodyColor: CSS_TEXT_MAIN, borderColor: CSS_BORDER_COLOR }
+        },
+        scales: {
+          x: { ticks: { color: CSS_TEXT_MUTED, font: { family: CSS_FONT } }, grid: { color: CSS_GRID_COLOR } },
+          y: { ticks: { color: CSS_TEXT_MUTED, font: { family: CSS_FONT } }, grid: { color: CSS_GRID_COLOR } }
+        }
+      };
+
+      function mergeDeep(target, source) {
+        for (const key in source) {
+          if (source[key] && typeof source[key] === 'object' && !Array.isArray(source[key])) {
+            if (!target[key]) target[key] = {};
+            mergeDeep(target[key], source[key]);
+          } else {
+            target[key] = source[key];
+          }
+        }
+        return target;
+      }
+
+      return mergeDeep(base, userOptions);
+    },
     
     async renderChart() {
       try {
@@ -103,7 +170,20 @@ export default {
         // Attendre que le canvas soit disponible
         await this.$nextTick();
         
-        const canvas = this.$refs[this.chartRef];
+        // Try to obtain the canvas reference; retry a few times if not yet rendered
+        let canvas = this.$refs[this.chartRef];
+        const maxAttempts = 6;
+        let attempt = 0;
+        while ((!canvas || !canvas.isConnected) && attempt < maxAttempts) {
+          // try alternative selector inside component root
+          canvas = this.$refs[this.chartRef] || (this.$el && this.$el.querySelector && this.$el.querySelector('canvas'));
+          if (canvas && canvas.isConnected) break;
+          attempt += 1;
+          // small delay to allow DOM to render when used inside tab transitions
+          // eslint-disable-next-line no-await-in-loop
+          await new Promise(r => setTimeout(r, 50));
+        }
+
         if (!canvas) {
           throw new Error('Canvas non trouvé');
         }
@@ -126,10 +206,12 @@ export default {
         }
         
         // Créer le nouveau graphique
+        const userOptions = (typeof this.getChartOptions === 'function') ? this.getChartOptions() : {};
+        const options = this._mergeOptions(userOptions);
         this.chart = new Chart(ctx, {
           type: this.chartType,
           data: this.getChartData(),
-          options: this.getChartOptions()
+          options
         });
         
         this.loading = false;
@@ -172,10 +254,11 @@ export default {
 
 <style scoped>
 .chart-container {
-  background: white;
+  background: var(--bg-card, #fff);
   border-radius: 8px;
-  padding: 16px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  padding: 12px;
+  box-shadow: var(--shadow-card, 0 6px 20px rgba(0,0,0,0.04));
+  border: 1px solid var(--border-color, #eef2f7);
 }
 
 .chart-wrapper {

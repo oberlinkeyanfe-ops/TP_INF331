@@ -8,10 +8,10 @@ traitements_bp = Blueprint('traitements', __name__)
 
 # Appliquer à toutes les routes du blueprint
 @traitements_bp.before_request
-@login_required
 def require_login():
-    """Vérifie l'authentification pour toutes les routes"""
-    pass
+    """Vérifie l'authentification pour toutes les routes (session-based)"""
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
 
 @traitements_bp.route('/')
 def traitements_page():

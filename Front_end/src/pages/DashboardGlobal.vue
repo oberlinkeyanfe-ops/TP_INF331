@@ -1,0 +1,729 @@
+<template>
+  <div class="dashboard-container theme-green stacked">
+    <!-- Header Section -->
+    <header class="dash-header">
+    
+      <div class="header-content">
+        
+
+        <div class="header-left">
+          <h1>Vue d'Ensemble & Analyse IA</h1>
+          <p class="subtitle">Pilotage, comparaisons et prédictions de performance</p>
+        </div>
+        
+        <div class="header-actions">
+          <div class="filter-wrapper">
+            <div class="select-wrapper">
+              <i class="fas fa-calendar-alt select-icon"></i>
+              <select v-model="period" @change="fetchWithPeriod" class="custom-select">
+                <option value="all">Tout l'historique</option>
+                <option value="30">30 derniers jours</option>
+                <option value="90">90 derniers jours</option>
+                <option value="365">Cette année</option>
+                <option value="custom">Personnalisé</option>
+              </select>
+            </div>
+          </div>
+
+          <div v-if="period === 'custom' || customOpen" class="date-range-picker">
+            <input type="date" v-model="startDate" class="custom-input" />
+            <span class="separator">➜</span>
+            <input type="date" v-model="endDate" class="custom-input" />
+            <button class="btn-icon" @click="fetchWithCustom" title="Appliquer">OK</button>
+          </div>
+
+          <button class="btn btn-primary" @click="fetchNow" :disabled="loadingDashboard">
+            <i class="fas fa-sync-alt" :class="{'spin': loadingDashboard}"></i>
+            {{ loadingDashboard ? 'Analyse en cours...' : 'Actualiser' }}
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div v-if="fetchError" class="error-banner">
+      <i class="fas fa-exclamation-circle"></i> <span>{{ fetchError }}</span>
+      <button @click="retryFetch">Réessayer</button>
+    </div>
+
+    <div v-if="!loadingDashboard && !fetchError" class="main-grid">
+      
+      <!-- 1. KPI Row (12 columns) -->
+      <div class="kpi-section">
+        <div class="kpi-card">
+          <div class="kpi-icon bg-green-100 text-green-600">📊</div>
+          <div>
+            <div class="kpi-value">{{ dashboardData?.bandes_actives ?? 0 }}</div>
+            <div class="kpi-label">Bandes Actives</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon bg-emerald-100 text-emerald-600">🐔</div>
+          <div>
+            <div class="kpi-value">{{ formatNumber(dashboardData?.total_animaux) }}</div>
+            <div class="kpi-label">Sujets Totaux</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon bg-orange-100 text-orange-600">📉</div>
+          <div>
+            <div class="kpi-value">{{ formatNumber(dashboardData?.nb_morts) }}</div>
+            <div class="kpi-label">Mortalité Cumulée</div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon bg-teal-100 text-teal-600">💰</div>
+          <div>
+            <div class="kpi-value">{{ formatCurrency(totalCoutsGlobal) }}</div>
+            <div class="kpi-label">Investissement Global</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Smart Insights / Predictions (12 columns) -->
+      <div class="grid-col-12 insights-section">
+        <div class="section-title"><i class="fas fa-robot"></i> Analyse & Recommandations</div>
+        <div class="insights-grid">
+          
+          <!-- Recommendation Aliment -->
+          <div class="insight-card best-practice">
+            <div class="insight-icon"><i class="fas fa-utensils"></i></div>
+            <div class="insight-content">
+              <h4>Alimentation Optimale</h4>
+              <p v-if="bestBandDetails?.top_aliment?.type_aliment">
+                Le type <strong>{{ bestBandDetails.top_aliment.type_aliment }}</strong> offre le meilleur rendement actuel (basé sur la bande <em>{{ bestBand?.nom_bande }}</em>).
+              </p>
+              <p v-else class="text-muted">Données insuffisantes pour recommander un aliment.</p>
+              <div class="insight-tag">Conseil Performance</div>
+            </div>
+          </div>
+
+          <!-- Alert Sanitaire -->
+          <div class="insight-card warning" v-if="highMortalityBands.length > 0">
+            <div class="insight-icon"><i class="fas fa-first-aid"></i></div>
+            <div class="insight-content">
+              <h4>Attention Sanitaire</h4>
+              <p>
+                <strong>{{ highMortalityBands.length }} bande(s)</strong> dépassent le seuil d'alerte de 5% de mortalité. 
+                <span v-if="treatmentStats?.efficacite_moyenne">L'efficacité moyenne des traitements est de {{ Math.round(treatmentStats.efficacite_moyenne * 10) / 10 }}/5.</span>
+              </p>
+              <div class="insight-tag alert">Action requise</div>
+            </div>
+          </div>
+          <div class="insight-card success" v-else>
+            <div class="insight-icon"><i class="fas fa-check-circle"></i></div>
+            <div class="insight-content">
+              <h4>État Sanitaire Stable</h4>
+              <p>Aucune dérive majeure de mortalité détectée sur les bandes actives.</p>
+              <div class="insight-tag ok">Situation saine</div>
+            </div>
+          </div>
+
+          <!-- Prediction -->
+          <div class="insight-card prediction">
+            <div class="insight-icon"><i class="fas fa-chart-line"></i></div>
+            <div class="insight-content">
+              <h4>Projection de Croissance</h4>
+              <p>
+                Croissance moy. observée : <strong>{{ avgGrowthRate }}g/semaine</strong>.
+                À ce rythme, les bandes actives atteindront leur poids cible dans ~{{ estWeeksToTarget }} semaines.
+              </p>
+              <div class="insight-tag info">Prévision</div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      
+      <!-- 3. MAIN CHARTS SECTION (2/3 + 1/3 layout) -->
+      
+      <!-- Left Column (2/3 width on desktop) -->
+      <div class="grid-col-8 main-charts-container">
+        
+        <!-- Top Row: Best Band Highlight (1/2) & Weight Trends (1/2) -->
+        <div class="sub-grid-2">
+          <!-- Best Band Highlight (Chart 1) -->
+          <div class="chart-card highlight-card" v-if="bestBand">
+            <div class="card-header">
+              <h3>🏆 Modèle de Réussite</h3>
+              <span class="badge">Top Rentabilité</span>
+            </div>
+            <div class="highlight-body">
+              <div class="gauge-area">
+                <PerformanceGauge :score="bestBand?.performancePercent ?? 0" />
+                <div class="gauge-title">{{ bestBand?.nom_bande }}</div>
+              </div>
+              <div class="metrics-area">
+                <div class="metric-row">
+                  <span>IC Moyen (Est.)</span>
+                  <strong>{{ bestBandDetails?.ic_moyen || '—' }}</strong>
+                </div>
+                <div class="metric-row">
+                  <span>Survie</span>
+                  <strong class="text-green-600">{{ bestBandDetails?.taux_survie }}%</strong>
+                </div>
+                <div class="metric-row">
+                  <span>Conso/Sujet</span>
+                  <strong>{{ bestBand.consommation_par_animal }} kg</strong>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Weight Trends (Chart 2) -->
+          <div class="chart-card">
+            <div class="card-header">
+              <h3>📈 Courbe de Croissance</h3>
+              <p>Poids moyen (g) vs Semaine</p>
+            </div>
+            <div class="chart-container">
+              <GlobalTrendsLine :trendData="dashboardData?.weight_trend || []" color="#10b981" />
+            </div>
+          </div>
+
+          <!-- Consumption Bar Chart (Chart 3) -->
+        <div class="chart-card">
+          <div class="card-header">
+            <h3>🍽️ Efficacité Alimentaire</h3>
+            <p>Comparaison Consommation Moyenne / Sujet (kg)</p>
+          </div>
+          <div class="chart-container ">
+            <GlobalComparisonBar :performanceData="performanceData" metric="consommation_par_animal" />
+          </div>
+        </div>
+
+        <div class="chart-card">
+          <div class="card-header">
+            <h3>💸 Structure des Coûts</h3>
+          </div>
+          <div class="chart-container custom-financials">
+             <div v-if="coutsData.length === 0" class="empty-mini">Pas de données financières</div>
+             <div v-else class="financial-list">
+                <div v-for="bande in coutsData.slice(0, 5)" :key="bande.bande_id" class="fin-item">
+                  <div class="fin-header">
+                    <span class="fin-name">{{ bande.nom_bande }}</span>
+                    <span class="fin-total">{{ formatCurrency(bande.cout_total) }}</span>
+                  </div>
+                  <div class="fin-bar-bg">
+                    <div class="fin-bar-segment feed" :style="{width: getPercent(bande.cout_aliment, bande.cout_total) + '%'}" title="Aliment"></div>
+                    <div class="fin-bar-segment treat" :style="{width: getPercent(bande.cout_traitements, bande.cout_total) + '%'}" title="Traitements"></div>
+                    <div class="fin-bar-segment other" :style="{width: getPercent(bande.cout_depenses, bande.cout_total) + '%'}" title="Autres"></div>
+                  </div>
+                  <div class="fin-legend-mini">
+                    <span class="dot feed"></span> Alim
+                    <span class="dot treat"></span> Soins
+                    <span class="dot other"></span> Autre
+                  </div>
+                </div>
+             </div>
+          </div>
+        </div>
+
+        <!-- Mortality Alerts (Chart 5) -->
+        <div class="chart-card mt-4">
+          <div class="card-header">
+            <h3>⚠️ Alertes Mortalité</h3>
+          </div>
+          <div class="chart-container compact">
+            <GlobalMortalityBar :performanceData="performanceData" />
+          </div>
+        </div>
+
+         <!-- Survival Donut (Chart 6) -->
+         <div class="chart-card mt-4">
+          <div class="card-header">
+            <h3>❤️ Survie Globale</h3>
+          </div>
+          <div class="chart-container compact">
+            <GlobalSurvivalDonut :performanceData="performanceData" />
+          </div>
+        </div>
+
+        
+        </div>
+
+        
+      </div>
+
+      
+
+      <!-- 4. Detailed Comparative Analysis Table (12 columns) -->
+      <div class="grid-col-12 mt-4">
+        <div class="chart-card table-card">
+          <div class="card-header table-header">
+            <div>
+              <h3>📋 Analyse Comparative Détaillée</h3>
+              <p>Classement et filtrage de toutes les bandes</p>
+            </div>
+            <div class="table-controls">
+              <input type="text" v-model="tableSearch" placeholder="Rechercher une bande..." class="search-input" />
+              <select v-model="tableSort" class="sort-select">
+                <option value="performance">Trier par Performance</option>
+                <option value="mortalite_desc">Mortalité (Haute → Basse)</option>
+                <option value="mortalite_asc">Mortalité (Basse → Haute)</option>
+                <option value="gains">Rentabilité Est.</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="table-responsive">
+            <table class="analysis-table">
+              <thead>
+                <tr>
+                  <th>Bande</th>
+                  <th>Statut</th>
+                  <th>Sujets</th>
+                  <th>Mortalité</th>
+                  <th>Conso/Sujet</th>
+                  <th>Coûts (Est.)</th>
+                  <th>Score Perf.</th>
+                  <th>Action Suggérée</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="bande in filteredTableData" :key="bande.bande_id">
+                  <td class="fw-bold">{{ bande.nom_bande }}</td>
+                  <td><span class="status-badge" :class="bande.statut">{{ bande.statut }}</span></td>
+                  <td>{{ bande.nombre_animaux }}</td>
+                  <td>
+                    <div class="progress-cell">
+                      <span>{{ bande.taux_mortalite }}%</span>
+                      <div class="progress-bar-mini">
+                        <div class="fill" :class="getMortalityClass(bande.taux_mortalite)" :style="{width: Math.min(bande.taux_mortalite * 5, 100) + '%'}"></div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>{{ bande.consommation_par_animal }} kg</td>
+                  <td>{{ formatCurrency(bande.gains) }}</td>
+                  <td>
+                    <div class="score-circle" :style="{borderColor: getScoreColor(bande.score)}">{{ Math.round(bande.score * 10) / 10 }}</div>
+                  </td>
+                  <td>
+                    <span class="recommendation-text" :class="getRecommendationClass(bande)">
+                      {{ getRecommendation(bande) }}
+                    </span>
+                  </td>
+                </tr>
+                <tr v-if="filteredTableData.length === 0">
+                  <td colspan="8" class="text-center py-4 text-muted">Aucune bande trouvée.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Empty State -->
+    <div v-else-if="isEmpty && !loadingDashboard" class="empty-dashboard">
+      <div class="empty-icon">🌱</div>
+      <h3>Aucune donnée pour cette période</h3>
+      <p>Commencez par créer des bandes et saisir des données.</p>
+    </div>
+  </div>
+</template>
+
+<script>
+import { api } from '../services/api.js';
+import GlobalComparisonBar from './charts/GlobalComparisonBar.vue';
+import GlobalMortalityBar from './charts/GlobalMortalityBar.vue';
+import GlobalTrendsLine from './charts/GlobalTrendsLine.vue';
+import GlobalGainsBar from './charts/GlobalGainsBar.vue';
+import GlobalSurvivalDonut from './charts/GlobalSurvivalDonut.vue';
+import PerformanceGauge from './charts/PerformanceGauge.vue';
+
+export default {
+  name: 'DashboardGlobal',
+  components: { 
+    GlobalComparisonBar, 
+    GlobalMortalityBar, 
+    GlobalTrendsLine, 
+    GlobalGainsBar, 
+    GlobalSurvivalDonut, 
+    PerformanceGauge 
+  },
+  data() {
+    return {
+      dashboardData: null,
+      performanceData: [],
+      coutsData: [],
+      treatmentStats: null,
+      loadingDashboard: false,
+      fetchError: null,
+      period: 'all',
+      customOpen: false,
+      startDate: null,
+      endDate: null,
+      bestBand: null,
+      bestBandDetails: null,
+      tableSearch: '',
+      tableSort: 'performance',
+      avgGrowthRate: 0,
+      estWeeksToTarget: 0
+    };
+  },
+  computed: {
+    isEmpty() {
+      return (!this.dashboardData || Object.keys(this.dashboardData).length === 0) && 
+             (!this.performanceData || this.performanceData.length === 0);
+    },
+    totalCoutsGlobal() {
+      if (!this.coutsData) return 0;
+      return this.coutsData.reduce((acc, curr) => acc + (curr.cout_total || 0), 0);
+    },
+    highMortalityBands() {
+      return this.performanceData.filter(b => b.taux_mortalite > 5);
+    },
+    filteredTableData() {
+      let data = [...this.performanceData];
+      
+      // Filter
+      if (this.tableSearch) {
+        const q = this.tableSearch.toLowerCase();
+        data = data.filter(b => b.nom_bande.toLowerCase().includes(q));
+      }
+
+      // Sort
+      data.sort((a, b) => {
+        if (this.tableSort === 'performance') return (b.score || 0) - (a.score || 0);
+        if (this.tableSort === 'mortalite_desc') return b.taux_mortalite - a.taux_mortalite;
+        if (this.tableSort === 'mortalite_asc') return a.taux_mortalite - b.taux_mortalite;
+        if (this.tableSort === 'gains') return b.gains - a.gains;
+        return 0;
+      });
+
+      return data;
+    }
+  },
+  methods: {
+    formatNumber(num) { return num ? num.toLocaleString('fr-FR') : '0'; },
+    formatCurrency(num) { return num ? num.toLocaleString('fr-FR', { style: 'currency', currency: 'XAF' }) : '0 FCFA'; },
+    getPercent(val, total) { return (!total || total === 0) ? 0 : Math.round((val / total) * 100); },
+
+    applyLocalPerformanceMap() {
+      try {
+        const raw = localStorage.getItem('band_performance_map');
+        if (!raw) return;
+        const map = JSON.parse(raw);
+        if (!map || typeof map !== 'object') return;
+        // Apply map to performanceData entries
+        this.performanceData = (this.performanceData || []).map(b => {
+          const id = Number(b.bande_id || b.bandeId || b.id);
+          if (!id) return b;
+          if (typeof map[id] === 'number') {
+            return { ...b, performance_percent: map[id], score: map[id] };
+          }
+          // also accept components_{id}
+          const compKey = `components_${id}`;
+          if (map[compKey]) {
+            // compute average if needed
+            const subs = Object.values(map[compKey]).filter(v => typeof v === 'number');
+            const avg = subs.length ? Math.round(subs.reduce((a, c) => a + c, 0) / subs.length) : null;
+            if (avg !== null) return { ...b, performance_percent: avg, score: avg };
+          }
+          return b;
+        });
+        // recompute best band from updated data
+        const sorted = [...this.performanceData].sort((a, b) => (b.score || 0) - (a.score || 0));
+        this.bestBand = sorted[0];
+        if (this.bestBand) this.bestBand.performancePercent = Math.round(this.bestBand.score || 0);
+      } catch (e) {
+        console.warn('applyLocalPerformanceMap failed', e);
+      }
+    },
+    
+    getMortalityClass(val) {
+      if (val < 2) return 'bg-success';
+      if (val < 5) return 'bg-warning';
+      return 'bg-danger';
+    },
+    getScoreColor(score) {
+      if (score > 80) return '#10b981';
+      if (score > 50) return '#f59e0b';
+      return '#ef4444';
+    },
+    getRecommendation(bande) {
+      if (bande.taux_mortalite > 5) return '🚨 Vérifier Protocole Sanitaire';
+      if (bande.consommation_par_animal > 5 && bande.taux_mortalite < 2) return '📉 Optimiser Ration (Gaspillage?)';
+      if (bande.score > 80) return '⭐ Modèle à reproduire';
+      return '✔️ Performance Standard';
+    },
+    getRecommendationClass(bande) {
+      if (bande.taux_mortalite > 5) return 'text-danger';
+      if (bande.score > 80) return 'text-success';
+      return 'text-muted';
+    },
+
+    async fetchDashboardGlobal() {
+      this.loadingDashboard = true;
+      this.fetchError = null;
+      try {
+        const qs = this.buildQueryString();
+        
+        // 1. Data Global
+        let resp;
+        try { resp = await api.get(`/dashboard/global-v2${qs}`); } 
+        catch (e) { resp = await api.get(`/dashboard/${qs}`); }
+
+        if (resp) {
+          this.dashboardData = {
+            bandes_actives: resp.bandes_actives ?? 0,
+            total_animaux: resp.total_animaux ?? 0,
+            nb_morts: resp.nb_morts ?? 0,
+            weight_trend: resp.weight_trend || [],
+            consommation_trend: resp.consommation_trend || []
+          };
+          this.performanceData = (resp.performance && Array.isArray(resp.performance)) ? resp.performance : [];
+        }
+
+        // 2. Perf fallback
+        if (!this.performanceData || !this.performanceData.length) {
+          try {
+            const perf = await api.get(`/dashboard/performance/bandes${qs}`);
+            this.performanceData = perf.performance || perf || [];
+          } catch (e) { console.warn('Perf fallback failed'); }
+        }
+
+        // 2.5 Apply local precomputed performance map if present (override server values)
+        this.applyLocalPerformanceMap();
+
+
+        // 3. Financials
+        try {
+          const coutsResp = await api.get(`/dashboard/couts/par_bande${qs}`);
+          this.coutsData = coutsResp.couts_par_bande || [];
+        } catch (e) { this.coutsData = []; }
+
+        // 4. Treatments Stats (New)
+        try {
+          const treatResp = await api.get(`/traitements/statistiques`);
+          this.treatmentStats = treatResp; // Expecting { efficacite_moyenne, ... }
+        } catch (e) { this.treatmentStats = null; }
+
+        // 5. Calculations
+        this.computeScoresAndBestBand();
+        this.calculateProjections();
+
+        // 6. Fetch Best Band Details for Recommendation
+        if (this.bestBand && this.bestBand.bande_id) {
+          try {
+            this.bestBandDetails = await api.get(`/dashboard/bande/details/${this.bestBand.bande_id}`);
+          } catch (e) { console.warn(e); }
+        }
+
+        // Listen for local storage perf map updates and re-apply if they occur
+        if (!this._storageListenerAdded) {
+          window.addEventListener('storage', (ev) => {
+            if (ev.key === 'band_performance_map') this.applyLocalPerformanceMap();
+          });
+          this._storageListenerAdded = true;
+        }
+
+      } catch (err) {
+        console.error(err);
+        this.fetchError = "Erreur de chargement. Vérifiez votre connexion.";
+      } finally {
+        this.loadingDashboard = false;
+      }
+    },
+
+    buildQueryString() {
+      const parts = [];
+      if (this.period && this.period !== 'all' && this.period !== 'custom') parts.push(`period_days=${this.period}`);
+      if (this.period === 'custom' && this.startDate) parts.push(`start=${this.startDate}`);
+      if (this.period === 'custom' && this.endDate) parts.push(`end=${this.endDate}`);
+      return parts.length ? `?${parts.join('&')}` : '';
+    },
+
+    fetchNow() { this.fetchDashboardGlobal(); },
+    fetchWithPeriod() {
+      if (this.period === 'custom') { this.customOpen = true; } 
+      else { this.customOpen = false; this.startDate = null; this.endDate = null; this.fetchDashboardGlobal(); }
+    },
+    fetchWithCustom() { 
+      if (!this.startDate || !this.endDate) return alert('Dates invalides');
+      this.fetchDashboardGlobal(); 
+    },
+    retryFetch() { this.fetchDashboardGlobal(); },
+
+    computeScoresAndBestBand() {
+      if (!this.performanceData || !this.performanceData.length) { this.bestBand = null; return; }
+
+      // Prefer server/client precomputed performance only — do not compute local fallback scores
+      this.performanceData = this.performanceData.map(b => {
+        if (typeof b.performance_percent === 'number') {
+          return { ...b, score: b.performance_percent };
+        }
+        // mark score as unknown when server did not provide a value
+        return { ...b, score: null };
+      });
+
+      // select among bands that have a numeric score
+      const valid = (this.performanceData || []).filter(b => typeof b.score === 'number');
+      if (!valid.length) { this.bestBand = null; return; }
+
+      const sorted = [...valid].sort((a, b) => (b.score || 0) - (a.score || 0));
+      this.bestBand = sorted[0];
+      if (this.bestBand) this.bestBand.performancePercent = Math.round(this.bestBand.score || 0);
+    },
+
+
+    calculateProjections() {
+      // Simple linear projection based on weight trend
+      const trends = this.dashboardData?.weight_trend || [];
+      if (trends.length < 2) { this.avgGrowthRate = 0; return; }
+      
+      // Avg growth per week (last few points)
+      const last = trends[trends.length - 1];
+      const prev = trends[0]; // simplistic over total period
+      const weeks = last.week - prev.week;
+      if (weeks > 0) {
+        this.avgGrowthRate = Math.round((last.mean_weight - prev.mean_weight) / weeks);
+      }
+      
+      const targetWeight = 2500; // Example target for broilers
+      if (last.mean_weight < targetWeight && this.avgGrowthRate > 0) {
+        this.estWeeksToTarget = Math.ceil((targetWeight - last.mean_weight) / this.avgGrowthRate);
+      } else {
+        this.estWeeksToTarget = 0;
+      }
+    }
+  },
+  mounted() { this.fetchDashboardGlobal(); }
+};
+</script>
+
+<style scoped>
+
+html { font-size: 1px; }
+/* Base Theme */
+.theme-green {
+  --primary: #10b981; --primary-dark: #059669; --primary-light: #d1fae5;
+  --bg-page: #f0fdf4; --text-main: #064e3b; --text-sec: #374151; --border: #e5e7eb;
+}
+.dashboard-container {margin-top: 10vh; font-family: 'Inter', sans-serif; background-color: var(--bg-page); min-height: 100vh; padding: 18px; font-size: 1px; color: var(--text-sec); }
+
+/* Header & Controls */
+.dash-header { margin-bottom: 32px; }
+.header-content { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; }
+.header-left h1 { font-size: 24px; font-weight: 800; color: var(--text-main); margin: 0; }
+.subtitle { color: #6b7280; margin: 4px 0 0 0; font-size: 13px; }
+.header-actions { display: flex; gap: 12px; background: white; padding: 8px 16px; border-radius: 50px; box-shadow: 0 2px 10px rgba(16, 185, 129, 0.1); }
+.custom-select { border: none; background: transparent; font-weight: 600; color: var(--text-main); cursor: pointer; outline: none; }
+.btn { border: none; padding: 6px 12px; border-radius: 16px; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.btn-primary { background-color: var(--primary); color: white; box-shadow: 0 3px 4px rgba(16, 185, 129, 0.25); }
+.spin { animation: spin 1s infinite linear; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+.filter-wrapper, .date-range-picker { display: flex; align-items: center; gap: 8px; }
+.custom-input { padding: 4px 8px; border: 1px solid #e5e7eb; border-radius: 8px; }
+
+/* Grid */
+.main-grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 24px; }
+.grid-col-12 { grid-column: span 12; } .grid-col-8 { grid-column: span 8; } .grid-col-4 { grid-column: span 4; }
+.sub-grid-2 {width: 90vw;  display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 24px; align-items: stretch; grid-auto-rows: 1fr ; /* ensure equal-height columns */ }
+@media (max-width: 1024px) { 
+  .grid-col-8, .grid-col-4 { grid-column: span 12; }
+  .header-content { flex-direction: column; align-items: flex-start; }
+  .header-actions { border-radius: 12px; padding: 8px; box-shadow: none; background: none; width: 100%; flex-wrap: wrap; }
+}
+@media (max-width: 768px) { .sub-grid-2 { grid-template-columns: 1fr; } }
+
+
+/* KPI */
+.kpi-section { grid-column: span 12; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 6px; }
+.kpi-card { background: white; padding: 16px; border-radius: 14px; display: flex; align-items: center; gap: 12px; box-shadow: 0 3px 4px -1px rgba(0,0,0,0.05); }
+.kpi-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; }
+.kpi-value { font-size: 18px; font-weight: 800; color: var(--text-main); }
+.kpi-label { font-size: 12px; color: #6b7280; font-weight: 500; }
+
+/* Insights Section */
+.insights-section { margin-bottom: 8px; }
+.section-title { font-size: 18px; font-weight: 700; color: var(--text-main); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+.insights-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+.insight-card { background: white; padding: 12px; border-radius: 12px; display: flex; gap: 12px; border-left: 4px solid transparent; box-shadow: 0 2px 4px rgba(0,0,0,0.04); }
+.insight-card.best-practice { border-color: #3b82f6; }
+.insight-card.warning { border-color: #ef4444; background: #fef2f2; }
+.insight-card.success { border-color: #10b981; }
+.insight-card.prediction { border-color: #8b5cf6; }
+.insight-icon { font-size: 20px; padding-top: 4px; }
+.best-practice .insight-icon { color: #3b82f6; }
+.warning .insight-icon { color: #ef4444; }
+.success .insight-icon { color: #10b981; }
+.prediction .insight-icon { color: #8b5cf6; }
+.insight-content h4 { margin: 0 0 4px 0; font-size: 15px; font-weight: 700; color: var(--text-main); }
+.insight-content p { margin: 0 0 8px 0; font-size: 13px; color: #4b5563; line-height: 1.4; }
+.insight-tag { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 10px; background: #e5e7eb; color: #374151; }
+.insight-tag.alert { background: #fee2e2; color: #991b1b; }
+.insight-tag.ok { background: #d1fae5; color: #065f46; }
+.insight-tag.info { background: #ede9fe; color: #5b21b6; }
+
+/* Charts & Tables */
+.chart-card { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 100%; }
+.card-header { margin-bottom: 20px; }
+.card-header h3 { font-size: 16px; font-weight: 700; color: var(--text-main); margin: 0; }
+.chart-container { flex: 1; min-height: 180px; min-width: 20vw; position: relative; }
+.chart-container.large { min-height: 300px; }
+.chart-container.compact { min-height: 180px; }
+
+/* Smaller layout for the wide consumption chart */
+.full-width-chart { align-self: start; }
+.full-width-chart .chart-container.large { min-height: 170px; max-height: 260px; }
+.full-width-chart .chart-card { padding: 12px; }
+
+/* Ensure chart-cards stretch to fill the grid row and keep consistent heights */
+.sub-grid-2 .chart-card { height: 100%; display: flex; flex-direction: column; }
+.sub-grid-2 .chart-card .chart-container { flex: 1; }
+
+/* Right column: vertical stack with consistent spacing */
+.secondary-charts-container { display: flex; flex-direction: column; gap: 16px; align-items: stretch; }
+.secondary-charts-container .chart-card { width: 100%; }
+
+/* Highlight Card */
+.highlight-card { background: linear-gradient(145deg, #ffffff 0%, #ecfdf5 100%); border: 1px solid #a7f3d0; }
+.highlight-body { display: flex; align-items: center; gap: 20px; }
+.gauge-area { flex: 1; text-align: center; }
+.gauge-title { font-weight: 700; color: var(--primary-dark); margin-top: 8px; font-size: 14px; }
+.metrics-area { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+.metric-row { display: flex; justify-content: space-between; font-size: 13px; border-bottom: 1px dashed #d1fae5; padding-bottom: 4px; }
+.metric-row span { color: #6b7280; }
+.metric-row strong { color: var(--text-main); }
+.badge { background: #fcd34d; color: #78350f; font-size: 10px; padding: 4px 8px; border-radius: 12px; font-weight: 800; text-transform: uppercase; float: right; }
+
+/* Table Section */
+.table-header { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 16px; }
+.table-controls { display: flex; gap: 8px; }
+.search-input, .sort-select { padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 13px; outline: none; }
+.table-responsive { overflow-x: auto; }
+.analysis-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.analysis-table th { text-align: left; padding: 12px; background: #f9fafb; color: #6b7280; font-weight: 600; border-bottom: 2px solid #e5e7eb; white-space: nowrap; }
+.analysis-table td { padding: 12px; border-bottom: 1px solid #f3f4f6; vertical-align: middle; }
+.status-badge { padding: 4px 8px; border-radius: 12px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+.status-badge.active { background: #d1fae5; color: #065f46; }
+.status-badge.terminee { background: #e5e7eb; color: #374151; }
+.progress-cell { display: flex; align-items: center; gap: 8px; }
+.progress-bar-mini { flex: 1; height: 6px; background: #e5e7eb; border-radius: 3px; min-width: 60px; }
+.progress-bar-mini .fill { height: 100%; border-radius: 3px; }
+.bg-success { background-color: #10b981; } .bg-warning { background-color: #f59e0b; } .bg-danger { background-color: #ef4444; }
+.score-circle { width: 32px; height: 32px; border-radius: 50%; border: 3px solid; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 12px; color: #374151; }
+.recommendation-text { font-size: 12px; font-weight: 600; }
+.text-danger { color: #ef4444; } .text-success { color: #10b981; } .text-muted { color: #9ca3af; }
+.fw-bold { font-weight: 600; color: #111827; }
+
+/* Financial Custom Chart */
+.custom-financials { overflow-y: auto; max-height: 250px; }
+.fin-item { margin-bottom: 12px; }
+.fin-header { display: flex; justify-content: space-between; font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.fin-bar-bg { height: 8px; background: #f3f4f6; border-radius: 4px; overflow: hidden; display: flex; }
+.fin-bar-segment { height: 100%; }
+.fin-bar-segment.feed { background: var(--primary); }
+.fin-bar-segment.treat { background: #f87171; }
+.fin-bar-segment.other { background: #94a3b8; }
+.fin-legend-mini { display: flex; gap: 12px; margin-top: 4px; font-size: 11px; color: #6b7280; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
+.dot.feed { background: var(--primary); } .dot.treat { background: #f87171; } .dot.other { background: #94a3b8; }
+
+/* Empty State */
+.empty-dashboard { grid-column: span 12; text-align: center; padding: 60px; color: #9ca3af; }
+.empty-icon { font-size: 48px; margin-bottom: 16px; opacity: 0.5; }
+.mt-4 { margin-top: 24px; }
+</style>

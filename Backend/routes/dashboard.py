@@ -1,18 +1,54 @@
 from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for
-from modeles.models import db, Bande, Consommation, Traitement
+from modeles.models import db, Bande, Consommation, Traitement, AnimalInfo, depense_elt
 from datetime import datetime, timedelta
 from sqlalchemy import func, extract
-from flask_login import login_required
 
 dashboard_bp = Blueprint('dashboard', __name__)
+
+# Reference consumption per week (same as frontend)
+CONSUMPTION_REFERENCE = [
+    {'week': 1, 'aliment_kg': 150, 'eau_litres': 300, 'prix_unitaire': 0.45},
+    {'week': 2, 'aliment_kg': 420, 'eau_litres': 640, 'prix_unitaire': 0.45},
+    {'week': 3, 'aliment_kg': 730, 'eau_litres': 980, 'prix_unitaire': 0.48},
+    {'week': 4, 'aliment_kg': 1100, 'eau_litres': 1350, 'prix_unitaire': 0.5},
+    {'week': 5, 'aliment_kg': 1450, 'eau_litres': 1680, 'prix_unitaire': 0.52},
+    {'week': 6, 'aliment_kg': 1750, 'eau_litres': 1900, 'prix_unitaire': 0.55},
+    {'week': 7, 'aliment_kg': 1950, 'eau_litres': 2050, 'prix_unitaire': 0.58},
+    {'week': 8, 'aliment_kg': 2050, 'eau_litres': 2150, 'prix_unitaire': 0.6}
+]
+
+
+def ratio_score(ref_value, actual_value):
+    """Return a 0-100 score comparing reference vs actual, or None when comparison is not meaningful.
+
+    Important: do NOT treat "no reference" or "no data" as a perfect (100) score — return None so
+    callers can decide how to present unknowns. This avoids false 100% when data is missing.
+    """
+    try:
+        ref = float(ref_value) if ref_value is not None else None
+        act = float(actual_value) if actual_value is not None else None
+    except Exception:
+        return None
+    # If there's no meaningful reference or no actual data, return None -> unknown
+    if ref is None or ref <= 0:
+        return None
+    if act is None or act <= 0:
+        return None
+    if act <= ref:
+        return 100
+    return max(0, min(100, int((ref / act) * 100)))
 
 
 # Appliquer à toutes les routes du blueprint
 @dashboard_bp.before_request
-@login_required
 def require_login():
-    """Vérifie l'authentification pour toutes les routes"""
-    pass
+    """Vérifie l'authentification pour toutes les routes (session basée).
+    Nous évitons d'utiliser flask-login ici car le projet n'initialise pas
+    nécessairement un LoginManager dans `app.py` et cela provoquait des
+    erreurs 500 lors des appels API non authentifiés.
+    """
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
 
 @dashboard_bp.route('/')
 def dashboard_page():
@@ -188,26 +224,362 @@ def get_performance_bandes():
         bandes = Bande.query.filter_by(eleveur_id=session['eleveur_id']).all()
         
         performance = []
-        for bande in bandes:
-            # Pas de modèle Depense : coût par animal non calculé
-            cout_par_animal = 0
+        for b in bandes:
+            perf = compute_performance_for_band(b)
+            base = {
+                'bande_id': b.id,
+                'nom_bande': b.nom_bande,
+                'statut': b.statut,
+                'nombre_animaux': b.nombre_initial,
+            }
+            performance.append({**base, **perf})
 
-            total_consommation = db.session.query(func.sum(Consommation.aliment_kg)).filter_by(
-                bande_id=bande.id
-            ).scalar() or 0
-            consommation_par_animal = total_consommation / bande.nombre_initial if bande.nombre_initial > 0 else 0
-
-            performance.append({
-                'bande_id': bande.id,
-                'nom_bande': bande.nom_bande,
-                'statut': bande.statut,
-                'nombre_animaux': bande.nombre_initial,
-                'cout_par_animal': round(cout_par_animal, 2),
-                'consommation_par_animal': round(consommation_par_animal, 2),
-                'taux_mortalite': round((bande.nombre_morts_totaux / bande.nombre_initial) * 100, 2) if bande.nombre_initial > 0 else 0
-            })
-        
         return jsonify({'performance': performance})
         
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+
+@dashboard_bp.route('/performance/map', methods=['GET'])
+def get_performance_map():
+    """Return a simple map of band_id -> performance_percent and components for all bands."""
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        bandes = Bande.query.filter_by(eleveur_id=session['eleveur_id']).all()
+        result = {}
+        for b in bandes:
+            perf = compute_performance_for_band(b)
+            pid = b.id
+            # Preserve None when unavailable so clients can distinguish unknown vs 0
+            result[str(pid)] = perf.get('performance_percent') if perf.get('performance_percent') is not None else None
+            # include components (may contain None subscores)
+            result[f'components_{pid}'] = perf.get('subscores', {})
+        return jsonify({'band_performance_map': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/performance/compare', methods=['GET'])
+def compare_performance_sources():
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        bandes = Bande.query.filter_by(eleveur_id=session['eleveur_id']).all()
+        result = []
+        for b in bandes:
+            # compute a fresh per-band performance
+            detail = compute_performance_for_band(b)
+            # try to fetch the entry as would be in the list (same computation)
+            list_entry = compute_performance_for_band(b)
+            perf_list = list_entry.get('performance_percent')
+            perf_detail = detail.get('performance_percent')
+            result.append({
+                'bande_id': b.id,
+                'nom_bande': b.nom_bande,
+                'perf_list': perf_list,
+                'perf_detail': perf_detail,
+                'diff': (perf_detail - perf_list) if (perf_detail is not None and perf_list is not None) else None,
+                'subscores': detail.get('subscores')
+            })
+        return jsonify({'compare': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+def compute_performance_for_band(bande):
+    try:
+        # total consumption kg
+        total_cons = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=bande.id).scalar() or 0
+        consommation_par_animal = float(total_cons) / bande.nombre_initial if (bande.nombre_initial and bande.nombre_initial > 0) else 0
+
+        # estimate average feed price from actual data if possible (sum cout / sum kg)
+        sum_cout_alim = db.session.query(func.coalesce(func.sum(Consommation.cout_aliment), 0)).filter_by(bande_id=bande.id).scalar() or 0
+        sum_kg = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=bande.id).scalar() or 0
+        avg_feed_price = float(sum_cout_alim) / float(sum_kg) if (sum_kg and sum_kg > 0) else None
+
+        # water price fallback
+        avg_water_price = 25
+
+        # fallback to reference unit prices if necessary
+        if not avg_feed_price:
+            prices = [r.get('prix_unitaire', 0) for r in CONSUMPTION_REFERENCE]
+            avg_feed_price = sum(prices) / len(prices) if prices else 0
+
+        # reference totals across weeks
+        ref_total_kg = sum([r['aliment_kg'] for r in CONSUMPTION_REFERENCE])
+        ref_total_water = sum([r['eau_litres'] for r in CONSUMPTION_REFERENCE])
+        ref_total_cost = ref_total_kg * float(avg_feed_price) + ref_total_water * float(avg_water_price)
+
+        # actual costs
+        total_cons_cout = sum_cout_alim or 0
+        total_depenses = db.session.query(func.coalesce(func.sum(depense_elt.cout), 0)).filter_by(bande_id=bande.id).scalar() or 0
+        total_traitements = db.session.query(func.coalesce(func.sum(Traitement.cout), 0)).filter_by(bande_id=bande.id).scalar() or 0
+        total_cost = float(total_cons_cout or 0) + float(total_depenses or 0) + float(total_traitements or 0)
+
+        # compute sub-scores (0-100) but only when there is meaningful data
+        cost_perf = None
+        if ref_total_cost > 0 and total_cost and total_cost > 0:
+            cost_perf = ratio_score(ref_total_cost, total_cost)
+
+        ref_per_animal = (ref_total_kg / bande.nombre_initial) if (bande.nombre_initial and bande.nombre_initial > 0) else 0
+        cons_perf = None
+        if ref_per_animal > 0 and consommation_par_animal and consommation_par_animal > 0:
+            cons_perf = ratio_score(ref_per_animal, consommation_par_animal)
+
+        treat_perf = None
+        if ref_total_cost > 0 and total_traitements and total_traitements > 0:
+            treat_perf = ratio_score(ref_total_cost, total_traitements)
+
+        elem_perf = None
+        if ref_total_cost > 0 and total_depenses and total_depenses > 0:
+            elem_perf = ratio_score(ref_total_cost, total_depenses)
+
+        components = {
+            'consommation_par_animal': round(consommation_par_animal, 2),
+            'cout_total': round(total_cost, 2),
+            'cout_aliment': round(total_cons_cout or 0, 2),
+            'cout_traitements': round(total_traitements or 0, 2),
+            'cout_depenses': round(total_depenses or 0, 2),
+            'ref_total_cost': round(ref_total_cost, 2),
+            'ref_total_kg': round(ref_total_kg, 2),
+            'subscores': {
+                'cost': cost_perf,
+                'consumption': cons_perf,
+                'treatment': treat_perf,
+                'elementary': elem_perf
+            }
+        }
+
+        # average of the subscores
+        subs = [v for v in components['subscores'].values() if isinstance(v, (int, float))]
+        perf_percent = int(sum(subs) / len(subs)) if subs else None
+        components['performance_percent'] = perf_percent
+        return components
+    except Exception as e:
+        # Log and return safe defaults to avoid 500s
+        try:
+            from flask import current_app
+            current_app.logger.exception('Error computing performance for band %s: %s', bande.id if hasattr(bande, 'id') else str(bande), e)
+        except Exception:
+            print('Error computing performance for band', getattr(bande, 'id', str(bande)), e)
+        return {
+            'consommation_par_animal': 0,
+            'cout_total': 0,
+            'cout_aliment': 0,
+            'cout_traitements': 0,
+            'cout_depenses': 0,
+            'ref_total_cost': 0,
+            'ref_total_kg': 0,
+            'subscores': {
+                'cost': 0,
+                'consumption': 0,
+                'treatment': 0,
+                'elementary': 0
+            },
+            'performance_percent': 0
+        }
+
+
+@dashboard_bp.route('/consommation/par_bande', methods=['GET'])
+def consommation_par_bande():
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        rows = db.session.query(
+            Bande.id,
+            Bande.nom_bande,
+            func.coalesce(func.sum(Consommation.aliment_kg), 0).label('total_aliment_kg'),
+            func.coalesce(func.sum(Consommation.eau_litres), 0).label('total_eau_litres')
+        ).outerjoin(Consommation, Consommation.bande_id == Bande.id).filter(
+            Bande.eleveur_id == session['eleveur_id']
+        ).group_by(Bande.id, Bande.nom_bande).all()
+
+        result = []
+        for r in rows:
+            result.append({
+                'bande_id': r.id,
+                'nom_bande': r.nom_bande,
+                'total_aliment_kg': float(r.total_aliment_kg or 0),
+                'total_eau_litres': float(r.total_eau_litres or 0)
+            })
+        return jsonify({'consommation_par_bande': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@dashboard_bp.route('/couts/par_bande', methods=['GET'])
+def couts_par_bande():
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        bandes = Bande.query.filter_by(eleveur_id=session['eleveur_id']).all()
+        result = []
+        for b in bandes:
+            total_cons_cout = db.session.query(func.coalesce(func.sum(Consommation.cout_aliment), 0)).filter_by(bande_id=b.id).scalar() or 0
+            total_depenses = db.session.query(func.coalesce(func.sum(depense_elt.cout), 0)).filter_by(bande_id=b.id).scalar() or 0
+            total_traitements = db.session.query(func.coalesce(func.sum(Traitement.cout), 0)).filter_by(bande_id=b.id).scalar() or 0
+            total = float(total_cons_cout or 0) + float(total_depenses or 0) + float(total_traitements or 0)
+            result.append({
+                'bande_id': b.id,
+                'nom_bande': b.nom_bande,
+                'cout_aliment': float(total_cons_cout or 0),
+                'cout_depenses': float(total_depenses or 0),
+                'cout_traitements': float(total_traitements or 0),
+                'cout_total': total
+            })
+        return jsonify({'couts_par_bande': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@dashboard_bp.route('/trends/poids', methods=['GET'])
+def trends_poids():
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        rows = db.session.query(
+            AnimalInfo.semaine_production,
+            func.avg(AnimalInfo.poids_moyen).label('mean_weight')
+        ).join(Bande).filter(
+            Bande.eleveur_id == session['eleveur_id']
+        ).group_by(AnimalInfo.semaine_production).order_by(AnimalInfo.semaine_production).all()
+
+        result = [{'week': int(r.semaine_production), 'mean_weight': float(r.mean_weight or 0)} for r in rows]
+        return jsonify({'weight_trend': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@dashboard_bp.route('/trends/consommation_hebdo', methods=['GET'])
+def trends_consommation_hebdo():
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        rows = db.session.query(
+            Consommation.semaine_production,
+            func.coalesce(func.sum(Consommation.aliment_kg), 0).label('total_kg')
+        ).join(Bande).filter(
+            Bande.eleveur_id == session['eleveur_id']
+        ).group_by(Consommation.semaine_production).order_by(Consommation.semaine_production).all()
+
+        result = [{'week': int(r.semaine_production or 0), 'total_kg': float(r.total_kg or 0)} for r in rows]
+        return jsonify({'consommation_trend': result})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@dashboard_bp.route('/global-v2', methods=['GET'])
+def dashboard_global_v2():
+    """Endpoint consolidé qui renvoie résumé, per-band performance, tendances.
+    Accepts optional query params: period_days=int, start=YYYY-MM-DD, end=YYYY-MM-DD
+    """
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        eleveur_id = session['eleveur_id']
+
+        # parse filters
+        period_days = request.args.get('period_days', type=int)
+        start = request.args.get('start')
+        end = request.args.get('end')
+
+        # base summary (reuse existing logic)
+        bandes_actives = Bande.query.filter_by(eleveur_id=eleveur_id, statut='active').count()
+        total_animaux = db.session.query(func.sum(Bande.nombre_initial)).filter_by(eleveur_id=eleveur_id).scalar() or 0
+        nb_morts = db.session.query(func.sum(Bande.nombre_morts_totaux)).filter_by(eleveur_id=eleveur_id).scalar() or 0
+
+        # performance per bande
+        perf_rows = Bande.query.filter_by(eleveur_id=eleveur_id).all()
+        performance = []
+        for b in perf_rows:
+            total_cons = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=b.id).scalar() or 0
+            consommation_par_animal = float(total_cons) / b.nombre_initial if b.nombre_initial else 0
+            taux_mortalite = (float(b.nombre_morts_totaux) / b.nombre_initial * 100) if b.nombre_initial else 0
+            # estimate gains rudimentaire si cout_unitaire disponible
+            gains = 0
+            if b.cout_unitaire:
+                gains = (b.nombre_initial - (b.nombre_morts_totaux or 0)) * (b.cout_unitaire or 0)
+            performance.append({
+                'bande_id': b.id,
+                'nom_bande': b.nom_bande,
+                'statut': b.statut,
+                'nombre_animaux': b.nombre_initial,
+                'consommation_par_animal': round(consommation_par_animal, 2),
+                'taux_mortalite': round(taux_mortalite, 2),
+                'gains': float(gains)
+            })
+
+        # trends: weight and consumption (respect filters)
+        # for simplicity, ignore date filters for now; reuse existing queries
+        weight_rows = db.session.query(AnimalInfo.semaine_production, func.avg(AnimalInfo.poids_moyen).label('mean_weight')).join(Bande).filter(Bande.eleveur_id == eleveur_id).group_by(AnimalInfo.semaine_production).order_by(AnimalInfo.semaine_production).all()
+        weight_trend = [{'week': int(r.semaine_production), 'mean_weight': float(r.mean_weight or 0)} for r in weight_rows]
+
+        cons_rows = db.session.query(Consommation.semaine_production, func.coalesce(func.sum(Consommation.aliment_kg), 0).label('total_kg')).join(Bande).filter(Bande.eleveur_id == eleveur_id).group_by(Consommation.semaine_production).order_by(Consommation.semaine_production).all()
+        consommation_trend = [{'week': int(r.semaine_production or 0), 'total_kg': float(r.total_kg or 0)} for r in cons_rows]
+
+        return jsonify({
+            'bandes_actives': bandes_actives,
+            'total_animaux': int(total_animaux),
+            'nb_morts': int(nb_morts),
+            'performance': performance,
+            'weight_trend': weight_trend,
+            'consommation_trend': consommation_trend
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/bande/details/<int:bande_id>', methods=['GET'])
+def bande_details(bande_id):
+    """Return detailed info for a bande: race, recent treatments, top aliment, IC estimate, mortality/survival rates and performance."""
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        b = Bande.query.filter_by(id=bande_id, eleveur_id=session['eleveur_id']).first()
+        if not b:
+            return jsonify({'error': 'Bande introuvable'}), 404
+
+        # Recent treatments (last 5)
+        traitements = Traitement.query.filter_by(bande_id=b.id).order_by(Traitement.date.desc()).limit(5).all()
+        traitements_list = [t.to_dict() for t in traitements]
+
+        # Top aliment by total kg
+        top_alim_row = db.session.query(Consommation.type_aliment, func.coalesce(func.sum(Consommation.aliment_kg), 0).label('total_kg')).filter_by(bande_id=b.id).group_by(Consommation.type_aliment).order_by(func.sum(Consommation.aliment_kg).desc()).first()
+        top_aliment = {'type_aliment': None, 'total_kg': 0}
+        if top_alim_row:
+            top_aliment = {'type_aliment': top_alim_row.type_aliment, 'total_kg': float(top_alim_row.total_kg or 0)}
+
+        # consommation totale and per animal
+        total_cons = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=b.id).scalar() or 0
+        consommation_par_animal = float(total_cons) / b.nombre_initial if b.nombre_initial else 0
+
+        # latest mean weight
+        latest_info = AnimalInfo.query.filter_by(bande_id=b.id).order_by(AnimalInfo.semaine_production.desc()).first()
+        latest_weight = float(latest_info.poids_moyen) if latest_info and latest_info.poids_moyen else None
+
+        # Estimate IC moyen (simplified): consommation_par_animal / latest_weight if available
+        ic_moyen = None
+        if latest_weight and latest_weight > 0:
+            ic_moyen = round(consommation_par_animal / latest_weight, 2)
+
+        taux_mortalite = round((float(b.nombre_morts_totaux or 0) / b.nombre_initial) * 100, 2) if b.nombre_initial else 0
+        taux_survie = round(100 - taux_mortalite, 2)
+
+        # Compute performance components
+        perf = compute_performance_for_band(b)
+
+        return jsonify({
+            'bande_id': b.id,
+            'nom_bande': b.nom_bande,
+            'race': b.race,
+            'traitements': traitements_list,
+            'top_aliment': top_aliment,
+            'consommation_par_animal': round(consommation_par_animal, 2),
+            'ic_moyen': ic_moyen,
+            'taux_mortalite': taux_mortalite,
+            'taux_survie': taux_survie,
+            'performance': perf
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

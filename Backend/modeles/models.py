@@ -203,7 +203,11 @@ class depense_elt(db.Model):
             'date': self.date.isoformat(),
             'type_depense': self.type_depense,
             'description': self.description,
-            'duree_heures': self.duree_heures
+            'duree_heures': self.duree_heures,
+            'cout': float(self.cout) if self.cout is not None else 0.0,
+            # Frontend expects keys like 'montant' and 'tache' for charts/donuts
+            'montant': float(self.cout) if self.cout is not None else 0.0,
+            'tache': self.type_depense or self.description
         }
 
 
