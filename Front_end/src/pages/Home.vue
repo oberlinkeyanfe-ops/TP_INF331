@@ -228,7 +228,7 @@
                 </select>
 
                 <label>Fournisseur</label>
-                <select v-model="form.race">
+                <select v-model="form.fournisseur">
                   <option value="FournisseurA">FournisseurA</option>
                   <option value="FournisseurB">FournisseurB</option>
                   <option value="FournisseurC">FournisseurC</option>
