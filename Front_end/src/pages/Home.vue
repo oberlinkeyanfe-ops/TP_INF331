@@ -137,6 +137,7 @@
             <div class="band-top">
               <span class="band-name">{{ band.nom_bande }}</span>
               <span :class="['status-badge', band.statut]">{{ band.statut }}</span>
+              <button class="icon-btn danger" title="Supprimer la bande" @click.stop="deleteBande(band)">🗑️</button>
             </div>
             <div class="band-info-grid">
               <div>
@@ -229,11 +230,15 @@
 
                 <label>Fournisseur</label>
                 <select v-model="form.fournisseur">
+                  <option value="">-- Sélectionner --</option>
                   <option value="FournisseurA">FournisseurA</option>
                   <option value="FournisseurB">FournisseurB</option>
                   <option value="FournisseurC">FournisseurC</option>
                   <option value="FournisseurD">FournisseurD</option>
                 </select>
+
+                <label>Poids moyen initial (g)</label>
+                <input v-model.number="form.poids_moyen_initial" type="number" placeholder="Ex: 40" min="0" />
               </div>
               <div class="form-group">
                 <label>Effectif initial</label>
@@ -461,6 +466,29 @@ export default {
       localStorage.setItem('current_band', JSON.stringify(bandData));
       this.$router.push(`/bandes/${band.id}`);
     },
+
+    async deleteBande(band) {
+      if (!band || !band.id) return;
+      if (!confirm(`Supprimer la bande "${band.nom_bande}" et toutes ses données ?`)) return;
+      try {
+        const res = await fetch(`http://localhost:5000/bandes/${band.id}/delete`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          this.bandsError = data.error || data.message || 'Erreur lors de la suppression de la bande';
+          return;
+        }
+        // refresh the list
+        await this.fetchBandes();
+      } catch (e) {
+        console.error('Erreur deleteBande:', e);
+        this.bandsError = 'Erreur de connexion lors de la suppression';
+      }
+    },
+
 
     loadUser() {
       try {
