@@ -121,7 +121,7 @@
         </div>
       </div>
 
-      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab" style="margin-bottom: 0; margin-top: 170vh;">
+      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab" style="margin-bottom: 0; margin-top: 120vh;">
         <header class="page-header">
           <div>
             <h2>Mes Bandes</h2>
@@ -209,26 +209,49 @@
           </div>
           <form @submit.prevent="createBande" class="modal-form">
             <div class="form-group">
-              <label>Nom de la bande</label>
-              <input v-model="form.nom_bande" type="text" placeholder="Ex: Lot #45" required />
+              
             </div>
             <div class="form-row">
               <div class="form-group">
+
+                <label>Nom de la bande</label>
+                <input v-model="form.nom_bande" type="text" placeholder="Ex: Lot #45" required />
+
+                <label>Durée</label>
+                <input v-model="form.duree_semaines" type="number"/>
+
+
                 <label>Race</label>
                 <select v-model="form.race">
                   <option value="Ross308">Ross308</option>
                   <option value="Cobb500">Cobb500</option>
                 </select>
+
+                <label>Fournisseur</label>
+                <select v-model="form.race">
+                  <option value="FournisseurA">FournisseurA</option>
+                  <option value="FournisseurB">FournisseurB</option>
+                  <option value="FournisseurC">FournisseurC</option>
+                  <option value="FournisseurD">FournisseurD</option>
+                </select>
               </div>
               <div class="form-group">
                 <label>Effectif initial</label>
                 <input v-model.number="form.nombre_initial" type="number" required />
+
+                <label>Date d'arrivée</label>
+                <input v-model="form.date_arrivee" type="date" required />
+
+                <label>Status</label>
+                <select v-model="form.statut">
+                  <option value="active">Active</option>
+                  <option value="archive">archive</option>
+                  <option value="termine">Termine</option>
+                </select>
               </div>
             </div>
-            <div class="form-group">
-              <label>Date d'arrivée</label>
-              <input v-model="form.date_arrivee" type="date" required />
-            </div>
+              
+            
             <div class="modal-actions">
               <button type="button" class="btn-secondary" @click="closeAndReset">Annuler</button>
               <button type="submit" class="btn-primary">Créer</button>
@@ -261,7 +284,24 @@ export default {
       loadingBands: false,
       user: null,
       bands: [],
-      form: { nom_bande: '', date_arrivee: '', race: 'Ross308', fournisseur: '', nombre_initial: 0, statut: 'active' },
+      // lists start empty; user can add new race/fournisseur from the modal
+      races: [],
+      fournisseurs: [],
+      showAddRace: false,
+      showAddFournisseur: false,
+      newRace: '',
+      newFournisseur: '',
+
+      form: {
+        nom_bande: '',
+        date_arrivee: '',
+        race: '',
+        fournisseur: '',
+        nombre_initial: 0,
+        duree_semaines: 8,
+        poids_moyen_initial: 0,
+        statut: 'active'
+      },
       avatarColor: '#6366f1',
       // Per-band performance mapping (id -> percent)
       bandPerformanceMap: {},
@@ -278,8 +318,7 @@ export default {
       chatInput: '',
       messages: [],
       chatMode: 'data',
-      chatLoading: false
-      ,
+      chatLoading: false,
       // Dashboard global handled by DashboardGlobal component
     };
   },
@@ -327,12 +366,27 @@ export default {
       } finally {
         this.loadingBands = false;
       }
+
     },
 
     resetForm() {
-      this.form = { nom_bande: '', date_arrivee: '', race: 'Ross308', fournisseur: '', nombre_initial: 0, statut: 'active' };
+      this.form = {
+        nom_bande: '',
+        date_arrivee: '',
+        race: '',
+        fournisseur: '',
+        nombre_initial: 0,
+        duree_semaines: 8,
+        poids_moyen_initial: 0,
+        statut: 'active'
+      };
       this.bandsError = '';
+      this.showAddRace = false;
+      this.showAddFournisseur = false;
+      this.newRace = '';
+      this.newFournisseur = '';
     },
+
 
     async createBande() {
       this.bandsError = '';
@@ -341,11 +395,31 @@ export default {
           this.bandsError = 'Le nom de la bande est requis';
           return;
         }
+        if (!this.form.fournisseur || !this.form.fournisseur.trim()) {
+          this.bandsError = 'Le fournisseur est requis';
+          return;
+        }
+        if (!this.form.nombre_initial || this.form.nombre_initial <= 0) {
+          this.bandsError = "L'effectif initial doit être supérieur à 0";
+          return;
+        }
+        if (!this.form.duree_semaines || this.form.duree_semaines <= 0) {
+          this.bandsError = 'La durée en semaines doit être au moins 1';
+          return;
+        }
+
+        const payload = {
+          ...this.form,
+          nombre_initial: Number(this.form.nombre_initial),
+          duree_semaines: Number(this.form.duree_semaines),
+          poids_moyen_initial: Number(this.form.poids_moyen_initial || 0)
+        };
+
         const res = await fetch('http://localhost:5000/bandes/create', {
           method: 'POST',
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(this.form)
+          body: JSON.stringify(payload)
         });
         const data = await res.json();
         if (!res.ok) {
@@ -361,6 +435,7 @@ export default {
         this.bandsError = 'Erreur de connexion au serveur';
       }
     },
+
 
     closeAndReset() { this.resetForm(); this.showCreate = false; },
 
@@ -420,7 +495,38 @@ export default {
         this.bandPerformanceMap = map;
         try { localStorage.setItem('band_performance_map', JSON.stringify(map)); } catch (e) { /* ignore */ }
       } catch (e) {
-        console.warn('Failed to fetch performance map from backend, leaving existing map in place', e);
+        console.warn('Failed to fetch performance map from backend, computing a local fallback', e);
+        // Build a best-effort fallback map from cached per-band entries or basic survival approximation
+        try {
+          const fallback = {};
+          for (const b of (this.bands || [])) {
+            const id = b && b.id;
+            if (!id) continue;
+            // try dedicated cached entry
+            try {
+              const raw = localStorage.getItem(`band_performance_${id}`);
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                const perfVal = parsed && typeof parsed.performance_percent === 'number' ? parsed.performance_percent : null;
+                if (typeof perfVal === 'number') { fallback[id] = perfVal; continue; }
+              }
+            } catch (err) { /* ignore parse */ }
+
+            // fallback: compute simple survival-based percent
+            const initial = Number(b.nombre_initial || 0);
+            const morts = Number(b.nombre_morts_totaux || 0);
+            if (initial > 0) {
+              const surv = Math.max(0, Math.min(100, Math.round((Math.max(0, initial - morts) / initial) * 100)));
+              fallback[id] = surv;
+            } else {
+              fallback[id] = 0;
+            }
+          }
+          this.bandPerformanceMap = fallback;
+          try { localStorage.setItem('band_performance_map', JSON.stringify(fallback)); } catch (err) { /* ignore */ }
+        } catch (err) {
+          console.warn('Failed to compute fallback performance map', err);
+        }
       }
     },
 
@@ -511,8 +617,7 @@ export default {
       let color = '#';
       for (let i = 0; i < 6; i++) color += letters[Math.floor(Math.random() * 16)];
       this.avatarColor = color;
-    }
-    ,
+    },
     // Chatbot helpers
     async analyserElevage() { return await chatbotMethods.analyserElevage(this); },
     async sendMessage() { return await chatbotMethods.sendMessage(this); },

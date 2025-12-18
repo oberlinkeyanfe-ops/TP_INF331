@@ -2496,31 +2496,12 @@ export default {
 
     // Global consolidated performance for the current bande (0-100)
     performancePercent() {
-      // Prefer localStorage precomputed map first
-      try {
-        const raw = localStorage.getItem('band_performance_map');
-        if (raw) {
-          const map = JSON.parse(raw);
-          if (map && typeof map === 'object') {
-            const val = map[this.id];
-            if (typeof val === 'number') return val;
-            // allow legacy components_xxx
-            const compKey = `components_${this.id}`;
-            if (map[compKey] && typeof map[compKey] === 'object' && typeof map[compKey].cost === 'number') {
-              // compute average of subscores if present
-              const subs = Object.values(map[compKey]).filter(v => typeof v === 'number');
-              if (subs.length) return Math.round(subs.reduce((a, b) => a + b, 0) / subs.length);
-            }
-          }
-        }
-      } catch (e) { /* ignore parse errors */ }
-
-      // Prefer server-side computed performance if available
+      // 1) Prefer server-side computed performance if available
       if (this.serverPerformance && typeof this.serverPerformance.performance_percent === 'number') {
         return this.serverPerformance.performance_percent;
       }
 
-      // No client-side global performance calculation — rely on backend/localStorage map
+      // 2) Try to read a cached map (produced by background job or other tab)
       try {
         const raw = localStorage.getItem('band_performance_map');
         if (raw) {
@@ -2537,12 +2518,32 @@ export default {
         }
       } catch (e) { /* ignore parse errors */ }
 
-      if (this.serverPerformance && typeof this.serverPerformance.performance_percent === 'number') {
-        return this.serverPerformance.performance_percent;
-      }
+      // 3) Compute a best-effort client-side performance combining several subscores
+      // We compute survival, consumption/cost, gains and productivity where available.
+      const weights = { survival: 0.4, consumption: 0.25, gains: 0.2, productivity: 0.15 };
 
-      // Unknown: return 0 (explicit) rather than computing locally to avoid divergence
-      return 0;
+      const subs = [];
+      const survRaw = (this.survivalPerformance != null && !Number.isNaN(this.survivalPerformance)) ? Number(this.survivalPerformance) : null;
+      const consRaw = (this.consumptionPerformance && typeof this.consumptionPerformance.overall === 'number') ? this.consumptionPerformance.overall : null;
+      const gainsRaw = (typeof this.gainPerformanceScore === 'number') ? this.gainPerformanceScore : null;
+      const prodRaw = (typeof this.productivityScore === 'number') ? this.productivityScore : null;
+
+      // Track if any real metric is available
+      const hasAnyReal = [survRaw, consRaw, gainsRaw, prodRaw].some(v => v !== null);
+      if (!hasAnyReal) return 0;
+
+      // Use neutral default (50) for missing subscores so a single perfect metric
+      // doesn't drive the overall to 100% when other dimensions are unknown.
+      const neutral = 50;
+      subs.push({ name: 'survival', value: survRaw !== null ? survRaw : neutral, weight: weights.survival });
+      subs.push({ name: 'consumption', value: consRaw !== null ? consRaw : neutral, weight: weights.consumption });
+      subs.push({ name: 'gains', value: gainsRaw !== null ? gainsRaw : neutral, weight: weights.gains });
+      subs.push({ name: 'productivity', value: prodRaw !== null ? prodRaw : neutral, weight: weights.productivity });
+
+      // Aggregate weighted average over all subscores (weights sum to 1)
+      const weightedSum = subs.reduce((acc, s) => acc + (Number.isFinite(s.value) ? s.value * s.weight : 0), 0);
+      const score = Math.round(weightedSum);
+      return Math.max(0, Math.min(100, score));
     },
 
     recentConsumptions() {
