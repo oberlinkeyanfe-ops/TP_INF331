@@ -87,6 +87,25 @@ export async function saveAnimalInfo(vm) {
 
     vm.animalInfos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
     vm.resetAnimalInfoForm();
+
+    // Recalculate cumulative deaths and sync to band record on server
+    try {
+      const totalDeaths = vm.animalInfos.reduce((s, i) => s + (Number(i.morts_semaine) || 0), 0);
+      const resp = await fetch(`http://localhost:5000/bandes/${vm.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre_morts_totaux: totalDeaths })
+      });
+      if (resp.ok) {
+        const bandUpdated = await resp.json().catch(() => null);
+        if (bandUpdated) vm.band = { ...(vm.band || {}), ...bandUpdated };
+      } else {
+        const err = await resp.json().catch(()=>({}));
+        console.warn('Could not sync band deaths:', err);
+      }
+    } catch (e) { console.warn('Sync band deaths failed:', e); }
+
   } catch (error) {
     console.error('saveAnimalInfo error:', error);
     alert('Impossible de sauvegarder les données animaux');
@@ -100,6 +119,25 @@ export async function deleteAnimalInfo(vm, info) {
     if (!response.ok) { const err = await response.json().catch(()=>({})); alert(`❌ ${err.error || 'Suppression impossible'}`); return; }
     vm.animalInfos = vm.animalInfos.filter(i => i.id !== info.id);
     vm.resetAnimalInfoForm();
+
+    // Recalculate cumulative deaths and sync to band record on server
+    try {
+      const totalDeaths = vm.animalInfos.reduce((s, i) => s + (Number(i.morts_semaine) || 0), 0);
+      const resp = await fetch(`http://localhost:5000/bandes/${vm.id}`, {
+        method: 'PUT',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ nombre_morts_totaux: totalDeaths })
+      });
+      if (resp.ok) {
+        const bandUpdated = await resp.json().catch(() => null);
+        if (bandUpdated) vm.band = { ...(vm.band || {}), ...bandUpdated };
+      } else {
+        const err = await resp.json().catch(()=>({}));
+        console.warn('Could not sync band deaths after delete:', err);
+      }
+    } catch (e) { console.warn('Sync band deaths failed:', e); }
+
     alert('🗑️ Enregistrement supprimé');
   } catch (error) { console.error('❌ deleteAnimalInfo error:', error); alert('❌ Erreur lors de la suppression'); }
 }

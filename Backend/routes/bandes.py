@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify, session, current_app
-from modeles.models import db, Bande
+from modeles.models import db, Bande, Consommation, AnimalInfo, depense_elt, Traitement
 from datetime import datetime, date
 from sqlalchemy import or_, func
 import csv
@@ -242,10 +242,20 @@ def delete_bande(id):
         
         if not bande:
             return jsonify({'error': 'Bande non trouvée'}), 404
-        
+
+        # Supprimer les données enfants qui référencent la bande pour éviter les violations de contrainte
+        try:
+            db.session.query(Consommation).filter_by(bande_id=id).delete(synchronize_session=False)
+            db.session.query(AnimalInfo).filter_by(bande_id=id).delete(synchronize_session=False)
+            db.session.query(depense_elt).filter_by(bande_id=id).delete(synchronize_session=False)
+            db.session.query(Traitement).filter_by(bande_id=id).delete(synchronize_session=False)
+        except Exception as child_del_err:
+            current_app.logger.exception('Erreur suppression données enfants pour bande %s: %s', id, child_del_err)
+            # continue to attempt deleting the main record, but if this fails we'll rollback below
+
         db.session.delete(bande)
         db.session.commit()
-        return jsonify({'success': True, 'message': 'Bande supprimée avec succès'})
+        return jsonify({'success': True, 'message': 'Bande et ses données associées supprimées avec succès'})
         
     except Exception as e:
         db.session.rollback()

@@ -47,3 +47,21 @@
 
 .success { color: green; margin-top: 12px; }
 .error { color: red; margin-top: 12px; }
+
+/* Universal Responsive Media Queries */
+@media (max-width: 900px) {
+  .contact-root {
+    max-width: 98vw;
+    padding: 10px;
+  }
+}
+@media (max-width: 600px) {
+  .contact-root {
+    padding: 4px;
+    border-radius: 6px;
+  }
+  .contact-form input, .contact-form textarea {
+    font-size: 0.95rem;
+    padding: 8px;
+  }
+}

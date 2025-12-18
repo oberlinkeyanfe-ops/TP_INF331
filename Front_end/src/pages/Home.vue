@@ -115,13 +115,34 @@
       <div v-if="activeTab === 'dashboard'" class="tab-fade dashboard-tab ">
 
 
-        <div class="dashboard-container" style="margin-top: 330vh;">
+        <div class="dashboard-container tab-offset">
+            <div>
+              <div class="chart-header" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+                <label style="font-weight:600;color:var(--text-muted);">Sélectionner la bande :</label>
+                <select v-model="selectedBandIdForChart" @change="onSelectBandForChart" style="padding:8px;border-radius:8px;border:1px solid var(--border-color);min-width:220px;">
+                  <option value="">-- Choisir une bande --</option>
+                  <option v-for="b in bands" :key="b.id" :value="b.id">{{ b.nom_bande }} ({{ b.date_arrivee }})</option>
+                </select>
+                <div style="margin-left:auto;color:var(--muted);font-size:0.95rem">Affiche la courbe de croissance</div>
+              </div>
+
+              <AnimalWeeklyLine
+                :bands="bands"
+                :selectedBand="selectedBandIdForChart"
+                @select-band="onSelectBandForChart"
+                :labels="bandWeeklyLabels"
+                :series="bandWeeklySeries"
+                title="Poids moyen hebdomadaire"
+                unit=" kg"
+              />
+              <div v-if="chartLoading" style="color:var(--muted); font-size:0.95rem;margin-top:8px">Chargement…</div>
+            </div>
           
           <DashboardGlobal ref="dashboardGlobal" />
         </div>
       </div>
 
-      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab" style="margin-bottom: 0; margin-top: 120vh;">
+      <div v-if="activeTab === 'bands'" class="tab-fade bands-tab tab-offset" style="margin-bottom: 0;">
         <header class="page-header">
           <div>
             <h2>Mes Bandes</h2>
@@ -267,6 +288,37 @@
 
     </main>
   </div>
+    <footer class="home-footer">
+        <div class="footer-content">
+          <div class="footer-top">
+            <div class="footer-brand">
+              <span class="footer-logo"><span class="logo"></span> <span>AVIPRO</span></span>
+              <small class="footer-desc">Plateforme intelligente pour la gestion et l’analyse de l’aviculture moderne.</small>
+            </div>
+            <div class="footer-socials">
+              <a href="mailto:contact@avipro.com" class="footer-social" title="Mail">
+                <span class="footer-icon-circle"><img src="/src/assets/icons/mail.svg" alt="Mail" class="footer-icon" /></span>
+                <span class="footer-social-label">contact@avipro.com</span>
+              </a>
+              <a href="https://instagram.com/avipro" class="footer-social" target="_blank" title="Instagram">
+                <span class="footer-icon-circle"><img src="/src/assets/icons/instagram.svg" alt="Instagram" class="footer-icon" /></span>
+                <span class="footer-social-label">Instagram</span>
+              </a>
+              <a href="https://facebook.com/avipro" class="footer-social" target="_blank" title="Facebook">
+                <span class="footer-icon-circle"><img src="/src/assets/icons/facebook.svg" alt="Facebook" class="footer-icon" /></span>
+                <span class="footer-social-label">Facebook</span>
+              </a>
+              <a href="tel:+237674663399" class="footer-social" title="Téléphone">
+                <span class="footer-icon-circle"><img src="/src/assets/icons/phone.svg" alt="Téléphone" class="footer-icon" /></span>
+                <span class="footer-social-label">+237 674663399</span>
+              </a>
+            </div>
+          </div>
+          <div class="footer-bottom">
+            <span>© 2025 Aviculture Pro — Tous droits réservés</span>
+          </div>
+        </div>
+    </footer>
 </template>
 
 <script>
@@ -277,12 +329,17 @@ import img3 from '../assets/slide/slide3.jpg';
 import * as chatbotMethods from './methods/chatbotMethods.js';
 import { api } from '../services/api.js';
 import DashboardGlobal from './DashboardGlobal.vue';
+import AnimalWeeklyLine from './charts/AnimalWeeklyLine.vue';
 
 export default {
   name: 'Home',
-  components: { DashboardGlobal },
+  components: { DashboardGlobal, AnimalWeeklyLine },
   data() {
     return {
+      selectedBandIdForChart: '',
+      bandWeeklyLabels: [],
+      bandWeeklySeries: [],
+      chartLoading: false,
       activeTab: 'home',
       dropdownOpen: false,
       showCreate: false,
@@ -361,6 +418,15 @@ export default {
         this.bands = Array.isArray(data) ? data : [];
         // cache for instant reloads
         try { localStorage.setItem('bands_cache', JSON.stringify(this.bands)); } catch (e) { /* ignore */ }
+
+        // Set default selected band for dashboard charts if on dashboard
+        try {
+          if (this.activeTab === 'dashboard' && this.bands.length && !this.selectedBandIdForChart) {
+            this.selectedBandIdForChart = this.bands[0].id;
+            // load series for the default band
+            this.loadBandWeekly(this.selectedBandIdForChart);
+          }
+        } catch (err) { /* ignore */ }
 
         // Fetch per-band performance & costs to display on home cards
         this.fetchBandPerformances().catch(e => console.warn('Erreur fetchBandPerformances:', e));
@@ -444,7 +510,41 @@ export default {
 
     closeAndReset() { this.resetForm(); this.showCreate = false; },
 
-    selectTab(t) { this.activeTab = t; if (t === 'bands') this.fetchBandes(); },
+    selectTab(t) { this.activeTab = t; if (t === 'bands' || t === 'dashboard') this.fetchBandes(); },
+
+    onSelectBandForChart() {
+      const id = this.selectedBandIdForChart;
+      if (!id) {
+        this.bandWeeklyLabels = [];
+        this.bandWeeklySeries = [];
+        return;
+      }
+      this.loadBandWeekly(id);
+    },
+
+    async loadBandWeekly(bandId) {
+      try {
+        this.chartLoading = true;
+        const res = await fetch(`http://localhost:5000/animal-info/bande/${bandId}`, {
+          method: 'GET',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const infos = Array.isArray(data.animal_info) ? data.animal_info : [];
+        // sort by semaine_production asc
+        infos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
+        this.bandWeeklyLabels = infos.map(i => `S${i.semaine_production}`);
+        this.bandWeeklySeries = infos.map(i => (typeof i.poids_moyen === 'number' ? i.poids_moyen : (i.poids_moyen ? Number(i.poids_moyen) : 0)));
+      } catch (e) {
+        console.error('Erreur loadBandWeekly:', e);
+        this.bandWeeklyLabels = [];
+        this.bandWeeklySeries = [];
+      } finally {
+        this.chartLoading = false;
+      }
+    },
     // Dashboard handled by `DashboardGlobal` component
     toggleDropdown() { this.dropdownOpen = !this.dropdownOpen; },
     formatDate(d) { return d ? new Date(d).toLocaleDateString('fr-FR') : '—'; },
@@ -476,16 +576,37 @@ export default {
           credentials: 'include',
           headers: { 'Content-Type': 'application/json' }
         });
-        const data = await res.json();
+
+        // Try to parse JSON but fall back to text when response isn't JSON
+        let bodyText = '';
+        let data = null;
+        try {
+          data = await res.json();
+          bodyText = JSON.stringify(data);
+        } catch (parseErr) {
+          bodyText = await res.text().catch(() => '<unreadable body>');
+        }
+
         if (!res.ok) {
-          this.bandsError = data.error || data.message || 'Erreur lors de la suppression de la bande';
+          // Provide a detailed error message for easier debugging
+          const statusMsg = `HTTP ${res.status} ${res.statusText}`;
+          const serverMsg = (data && (data.error || data.message)) || bodyText || 'Erreur lors de la suppression de la bande';
+          const composed = `${statusMsg} — ${serverMsg}`;
+          console.error('deleteBande failed:', composed);
+          this.bandsError = serverMsg;
+
+          // If not authenticated, suggest re-login
+          if (res.status === 401) {
+            this.bandsError = 'Non connecté — veuillez vous reconnecter.';
+          }
           return;
         }
+
         // refresh the list
         await this.fetchBandes();
       } catch (e) {
-        console.error('Erreur deleteBande:', e);
-        this.bandsError = 'Erreur de connexion lors de la suppression';
+        console.error('Erreur deleteBande (network):', e);
+        this.bandsError = 'Erreur réseau lors de la suppression de la bande';
       }
     },
 
@@ -664,3 +785,120 @@ export default {
 };
 </script>
 <style src="../../css/home.css"></style>
+<style scoped>
+/* Reduced top margin for tab content to improve layout */
+.tab-offset { margin-top: 1.5rem !important; }
+.home-footer {
+
+  width: 100%;
+  background: linear-gradient(90deg, #101820 60%, #1a2a36 100%);
+  color: #fff;
+  padding: 0;
+  margin-top: 32px;
+  box-shadow: 0 -2px 16px 0 rgba(0,0,0,0.08);
+}
+.footer-content {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 0 24px 0 24px;
+}
+.footer-top {
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 18px 0 8px 0;
+}
+.footer-brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.footer-logo {
+  font-size: 1.5rem;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.04em;
+}
+.footer-logo .logo {
+  width: 36px;
+  height: 36px;
+  display: inline-block;
+  background-image: url('/src/assets/icons/LOGO.svg');
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+}
+.footer-desc {
+  font-size: 0.92rem;
+  opacity: 0.78;
+  max-width: 420px;
+  text-align: center;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+}
+.footer-socials {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 22px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.footer-social {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #fff;
+  text-decoration: none;
+  font-size: 1.05rem;
+  transition: color 0.2s;
+}
+.footer-social:hover .footer-social-label {
+  color: #10b981;
+}
+.footer-icon-circle {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: #232b33;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(16,24,32,0.08);
+  transition: background 0.2s;
+}
+.footer-social:hover .footer-icon-circle {
+  background: #10b981;
+}
+.footer-icon {
+  width: 22px;
+  height: 22px;
+  filter: invert(1);
+  transition: filter 0.2s;
+}
+.footer-social-label {
+  font-size: 1.05rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: color 0.2s;
+}
+.footer-bottom {
+
+  border-top: 1px solid #222c36;
+  padding: 8px 0 4px 0;
+  text-align: center;
+  font-size: 0.98rem;
+  opacity: 0.8;
+}
+@media (max-width: 700px) {
+  .footer-content { padding: 0 6px; }
+  .footer-desc { font-size: 0.98rem; }
+  .footer-logo { font-size: 1.1rem; }
+  .footer-social-label { font-size: 0.98rem; }
+  .footer-top { padding: 24px 0 10px 0; }
+}
+</style>

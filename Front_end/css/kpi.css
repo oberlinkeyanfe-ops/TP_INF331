@@ -297,6 +297,39 @@
   font-style: italic;
 }
 
+/* Universal Responsive Media Queries */
+@media (max-width: 1200px) {
+  .kpi-dashboard, .kpi-grid, .kpi-details, .kpi-charts {
+    max-width: 98vw;
+    padding: 10px;
+  }
+  .kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+@media (max-width: 900px) {
+  .kpi-dashboard, .kpi-grid, .kpi-details, .kpi-charts {
+    padding: 8px;
+  }
+}
+@media (max-width: 600px) {
+  .kpi-dashboard, .kpi-grid, .kpi-details, .kpi-charts {
+    flex-direction: column;
+    padding: 4px;
+  }
+  .kpi-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .kpi-card {
+    border-radius: 6px;
+    padding: 6px;
+  }
+  .kpi-value {
+    font-size: 1.1rem;
+  }
+}
+
 /* Responsive */
 @media (max-width: 1200px) {
   .kpi-grid {

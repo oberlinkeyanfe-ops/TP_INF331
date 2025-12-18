@@ -84,7 +84,7 @@ button {
 }
 
 .home-tab{
-  margin-top: 100vh; /* reduce huge space so content appears immediately */
+  margin-top: 1.5rem; /* reduced spacing so content appears immediately */
 }
 /* Animations de transition entre onglets */
 .tab-fade {
@@ -397,6 +397,42 @@ button {
 }
 
 .hero-slider-wrapper:hover { transform: rotate(0deg); }
+
+/* Universal Responsive Media Queries */
+@media (max-width: 1200px) {
+  .main-container, .hero-grid, .mini-stats {
+    max-width: 98vw;
+    padding: 10px;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+@media (max-width: 900px) {
+  .main-container, .hero-grid {
+    padding: 8px;
+  }
+  .mini-stats {
+    gap: 1rem;
+  }
+}
+@media (max-width: 600px) {
+  .main-container, .hero-grid {
+    flex-direction: column;
+    padding: 4px;
+  }
+  .hero-grid {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+  .stat strong {
+    font-size: 1.1rem;
+  }
+  .hero-content h1 {
+    font-size: 1.3rem;
+  }
+}
 
 .slider-window {
   overflow: hidden;
@@ -858,7 +894,7 @@ input:focus, select:focus {
    DASHBOARD GLOBAL (Styles ajoutées)
    ========================================= */
 .dashboard-wrapper { width: 100%; margin-top: 1rem; }
- .dashboard-tab { margin-top: 200vh; }
+.dashboard-tab { margin-top: 1.5rem; }
 .dashboard-tab .page-header { margin-bottom: 0.75rem; }
 .dashboard-grid { display: grid; gap: 1rem; }
 

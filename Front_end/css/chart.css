@@ -81,6 +81,21 @@
 }
 
 .widgets-section {
+
+/* Universal Responsive Media Queries */
+@media (max-width: 600px) {
+  .charts-section, .chart-row, .chart-container, .kpi-row, .widgets-section {
+    padding: 4px;
+    gap: 6px;
+  }
+  .chart-container, .kpi-card, .widget {
+    border-radius: 6px;
+    padding: 6px;
+  }
+  .kpi-value {
+    font-size: 1.1rem;
+  }
+}
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;

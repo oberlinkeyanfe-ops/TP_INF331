@@ -2467,7 +2467,8 @@ export default {
 
     mortalityRate() {
       if (!this.band || !this.band.nombre_initial || this.band.nombre_initial === 0) return 0;
-      const morts = this.band.nombre_morts_totaux || 0;
+      // Prefer live animal entries if present, otherwise use stored band total
+      const morts = (this.animalInfos && this.animalInfos.length) ? this.totalAnimalDeaths : (this.band.nombre_morts_totaux || 0);
       return ((morts / this.band.nombre_initial) * 100).toFixed(1);
     },
     

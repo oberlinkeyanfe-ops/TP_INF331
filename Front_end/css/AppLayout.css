@@ -353,3 +353,39 @@ background-color: #1d4ed8;
 background-color: #a3b1c2;
 cursor: not-allowed;
 }
+
+/* Universal Responsive Media Queries */
+@media (max-width: 1200px) {
+	.main-content, .bands-grid, .chatbot-interface {
+		max-width: 98vw;
+		padding: 10px;
+	}
+	.bands-grid {
+		grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	}
+}
+@media (max-width: 900px) {
+	.navbar, .main-content {
+		padding: 8px;
+	}
+	.bands-grid {
+		gap: 10px;
+	}
+}
+@media (max-width: 600px) {
+	.navbar, .main-content {
+		flex-direction: column;
+		padding: 4px;
+	}
+	.bands-grid {
+		grid-template-columns: 1fr;
+		gap: 6px;
+	}
+	.band-card, .chatbot-interface {
+		padding: 8px;
+		border-radius: 8px;
+	}
+	.page-title {
+		font-size: 1.2rem;
+	}
+}

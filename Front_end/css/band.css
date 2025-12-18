@@ -52,6 +52,42 @@ button {
     font-size: 14px;
 }
 
+/* Universal Responsive Media Queries */
+@media (max-width: 1200px) {
+    .bande-root, .main-section, .bande-header, .header-main, .header-stats {
+        max-width: 98vw;
+        padding: 10px;
+    }
+    .header-stats {
+        grid-template-columns: 1fr;
+    }
+}
+@media (max-width: 900px) {
+    .bande-header, .main-section {
+        padding: 8px;
+    }
+    .header-main {
+        gap: 8px;
+    }
+}
+@media (max-width: 600px) {
+    .bande-root, .main-section, .bande-header {
+        flex-direction: column;
+        padding: 4px;
+    }
+    .bande-tabs {
+        min-width: 60px;
+        width: 60px;
+        padding: 4px 0;
+    }
+    .main-section {
+        padding: 4px;
+    }
+    .header-title h1 {
+        font-size: 1.1rem;
+    }
+}
+
 h1, h2, h3 {
     color: var(--text-dark);
     margin-top: 0;
