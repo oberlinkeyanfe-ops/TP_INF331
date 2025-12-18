@@ -73,8 +73,17 @@
         <div class="kpi-card">
           <div class="kpi-icon bg-teal-100 text-teal-600">💰</div>
           <div>
-            <div class="kpi-value">{{ formatCurrency(totalCoutsGlobal) }}</div>
-            <div class="kpi-label">Investissement Global</div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <label style="font-size:12px; color:#6b7280;">Bande</label>
+              <select v-model="selectedCoutBandId" class="custom-select" @change="onCoutBandChange">
+                <option value="" disabled v-if="!coutsData.length">Chargement...</option>
+                <option v-for="c in coutsData" :key="c.bande_id" :value="c.bande_id">{{ c.nom_bande }}</option>
+              </select>
+            </div>
+            <div>
+              <div class="kpi-value">{{ formatCurrency((selectedBandCost && selectedBandCost.cout_total) || 0) }}</div>
+              <div class="kpi-label">Dépenses (bande sélectionnée)</div>
+            </div>
           </div>
         </div>
       </div>
@@ -347,6 +356,7 @@ export default {
       dashboardData: null,
       performanceData: [],
       coutsData: [],
+      selectedCoutBandId: null,
       treatmentStats: null,
       loadingDashboard: false,
       fetchError: null,
@@ -362,6 +372,14 @@ export default {
       estWeeksToTarget: 0
     };
   },
+  watch: {
+    // When coutsData is loaded, default to first band if none selected
+    coutsData(newVal) {
+      if ((!this.selectedCoutBandId || this.selectedCoutBandId === null) && Array.isArray(newVal) && newVal.length) {
+        this.selectedCoutBandId = newVal[0].bande_id;
+      }
+    }
+  },
   computed: {
     isEmpty() {
       return (!this.dashboardData || Object.keys(this.dashboardData).length === 0) && 
@@ -370,6 +388,14 @@ export default {
     totalCoutsGlobal() {
       if (!this.coutsData) return 0;
       return this.coutsData.reduce((acc, curr) => acc + (curr.cout_total || 0), 0);
+    },
+    // Selected band's cost details used by the KPI selector
+    selectedBandCost() {
+      try {
+        if (!this.coutsData || !this.coutsData.length) return null;
+        if (!this.selectedCoutBandId) return this.coutsData[0];
+        return this.coutsData.find(c => String(c.bande_id) === String(this.selectedCoutBandId)) || null;
+      } catch (e) { return null; }
     },
     highMortalityBands() {
       return this.performanceData.filter(b => b.taux_mortalite > 5);
@@ -396,6 +422,10 @@ export default {
     }
   },
   methods: {
+
+    onCoutBandChange() {
+      // no-op for now — computed selectedBandCost will reflect selection
+    },
     formatNumber(num) { return num ? num.toLocaleString('fr-FR') : '0'; },
     formatCurrency(num) { return num ? num.toLocaleString('fr-FR', { style: 'currency', currency: 'XAF' }) : '0 FCFA'; },
     getPercent(val, total) { return (!total || total === 0) ? 0 : Math.round((val / total) * 100); },
