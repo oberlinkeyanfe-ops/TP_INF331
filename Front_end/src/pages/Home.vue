@@ -268,7 +268,7 @@
 // Importation directe des images pour éviter les erreurs de chemin
 import img1 from '../assets/slide/slide1.png';
 import img2 from '../assets/slide/slide2.png';
-import img3 from '../assets/slide/slide3.png';
+import img3 from '../assets/slide/slide3.jpg';
 import * as chatbotMethods from './methods/chatbotMethods.js';
 import { api } from '../services/api.js';
 import DashboardGlobal from './DashboardGlobal.vue';

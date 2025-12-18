@@ -3,7 +3,7 @@
     <nav class="bande-tabs">
       <div class="logo">
         <img src="../assets/icons/LOGO.svg" alt="Logo" />
-        <span>AVIPRO</span>
+        <span>AVICULTURE PRO</span>
       </div>
 
       <div class="tabs">
@@ -71,9 +71,7 @@
           <button class="back-home" @click="goHome">
             <img src="../assets/icons/exit.svg" alt="Accueil" />
           </button>
-          <span class="settings" @click="openSettings">
-            <i class="fas fa-cog"></i>
-          </span>
+          
         </div>
       </div>
     </nav>
