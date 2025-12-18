@@ -495,37 +495,21 @@ export default {
         this.bandPerformanceMap = map;
         try { localStorage.setItem('band_performance_map', JSON.stringify(map)); } catch (e) { /* ignore */ }
       } catch (e) {
-        console.warn('Failed to fetch performance map from backend, computing a local fallback', e);
-        // Build a best-effort fallback map from cached per-band entries or basic survival approximation
+        console.warn('Failed to fetch performance map from backend:', e);
+        // If the backend fetch fails, prefer using any previously cached map from localStorage;
+        // do NOT compute new performance values in the frontend.
         try {
-          const fallback = {};
-          for (const b of (this.bands || [])) {
-            const id = b && b.id;
-            if (!id) continue;
-            // try dedicated cached entry
-            try {
-              const raw = localStorage.getItem(`band_performance_${id}`);
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                const perfVal = parsed && typeof parsed.performance_percent === 'number' ? parsed.performance_percent : null;
-                if (typeof perfVal === 'number') { fallback[id] = perfVal; continue; }
-              }
-            } catch (err) { /* ignore parse */ }
-
-            // fallback: compute simple survival-based percent
-            const initial = Number(b.nombre_initial || 0);
-            const morts = Number(b.nombre_morts_totaux || 0);
-            if (initial > 0) {
-              const surv = Math.max(0, Math.min(100, Math.round((Math.max(0, initial - morts) / initial) * 100)));
-              fallback[id] = surv;
-            } else {
-              fallback[id] = 0;
-            }
+          const existing = localStorage.getItem('band_performance_map');
+          if (existing) {
+            const parsed = JSON.parse(existing);
+            if (parsed && typeof parsed === 'object') this.bandPerformanceMap = parsed;
+            else this.bandPerformanceMap = {};
+          } else {
+            this.bandPerformanceMap = this.bandPerformanceMap || {};
           }
-          this.bandPerformanceMap = fallback;
-          try { localStorage.setItem('band_performance_map', JSON.stringify(fallback)); } catch (err) { /* ignore */ }
         } catch (err) {
-          console.warn('Failed to compute fallback performance map', err);
+          console.warn('Failed to load cached performance map from localStorage', err);
+          this.bandPerformanceMap = this.bandPerformanceMap || {};
         }
       }
     },
@@ -629,6 +613,9 @@ export default {
     this._closeDropdownHandler = () => { this.dropdownOpen = false; };
     document.addEventListener('click', this._closeDropdownHandler);
     this.startSlideAuto();
+    // Try to refresh band performance map on mount (will succeed if session cookie exists)
+    this.fetchBandPerformances().catch(e => console.warn('Failed refresh band performances (mount):', e));
+
     // on mount, load data immediately for a snappy UX
     if (this.activeTab === 'bands') this.fetchBandes();
     // Load bands and dashboard immediately if user present
@@ -637,8 +624,10 @@ export default {
       this.loadCachedData();
       // run both in parallel. DashboardGlobal is a child component; call its method if present
       const dashPromise = (this.$refs.dashboardGlobal && this.$refs.dashboardGlobal.fetchDashboardGlobal) ? this.$refs.dashboardGlobal.fetchDashboardGlobal() : Promise.resolve();
-      Promise.all([this.fetchBandes(), dashPromise]).catch(err => console.warn('Background refresh error', err));      // Also ensure band performance map is refreshed from server to avoid stale 100% values
-      this.fetchBandPerformances().catch(e => console.warn('Failed refresh band performances:', e));    }
+      Promise.all([this.fetchBandes(), dashPromise]).catch(err => console.warn('Background refresh error', err));
+      // Also attempt another refresh after user-specific initialization (best-effort)
+      this.fetchBandPerformances().catch(e => console.warn('Failed refresh band performances (user):', e));
+    }
     window.addEventListener('storage', this._onStorageChange);
     // Listen for same-tab perf updates
     window.addEventListener('bandPerformanceUpdated', this._onBandPerfUpdated);

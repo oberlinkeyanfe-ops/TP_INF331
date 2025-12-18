@@ -18,6 +18,44 @@ CONSUMPTION_REFERENCE = [
 ]
 
 
+# Elementary expense reference (categories used in frontend)
+ELEMENTARY_EXPENSES_REFERENCE = [
+    {'key': 'chauffage', 'label': 'Chauffage', 'typical_monthly_fcfa': 50000},
+    {'key': 'electricite', 'label': 'Électricité', 'typical_monthly_fcfa': 30000},
+    {'key': 'transport', 'label': 'Transport', 'typical_monthly_fcfa': 20000},
+    {'key': 'litiere', 'label': 'Copeaux / Litière', 'typical_monthly_fcfa': 8000},
+    {'key': 'nettoyage', 'label': 'Nettoyage / Désinfection', 'typical_monthly_fcfa': 5000},
+    {'key': 'maintenance', 'label': 'Maintenance', 'typical_monthly_fcfa': 15000},
+    {'key': 'autres', 'label': 'Autres', 'typical_monthly_fcfa': 10000}
+]
+
+
+# Mortality reference by week (low / high %)
+MORTALITY_REFERENCE = [
+    {'week': 1, 'low': 0.0, 'high': 1.0},
+    {'week': 2, 'low': 0.0, 'high': 0.8},
+    {'week': 3, 'low': 0.0, 'high': 0.6},
+    {'week': 4, 'low': 0.0, 'high': 0.5},
+    {'week': 5, 'low': 0.0, 'high': 0.4},
+    {'week': 6, 'low': 0.0, 'high': 0.4},
+    {'week': 7, 'low': 0.0, 'high': 0.3},
+    {'week': 8, 'low': 0.0, 'high': 0.3},
+    {'week': 9, 'low': 0.0, 'high': 0.25},
+    {'week': 10, 'low': 0.0, 'high': 0.25},
+    {'week': 11, 'low': 0.0, 'high': 0.20},
+    {'week': 12, 'low': 0.0, 'high': 0.20}
+]
+
+
+# Survival performance guidance thresholds
+SURVIVAL_REFERENCE = {
+    'excellent': 90,
+    'good': 75,
+    'warning': 60,
+    'critical': 0
+}
+
+
 def ratio_score(ref_value, actual_value):
     """Return a 0-100 score comparing reference vs actual, or None when comparison is not meaningful.
 
@@ -251,9 +289,8 @@ def get_performance_map():
         for b in bandes:
             perf = compute_performance_for_band(b)
             pid = b.id
-            # Preserve None when unavailable so clients can distinguish unknown vs 0
-            result[str(pid)] = perf.get('performance_percent') if perf.get('performance_percent') is not None else None
-            # include components (may contain None subscores)
+            result[str(pid)] = perf.get('performance_percent', 0) if perf.get('performance_percent') is not None else 0
+            # include components
             result[f'components_{pid}'] = perf.get('subscores', {})
         return jsonify({'band_performance_map': result})
     except Exception as e:
@@ -289,73 +326,109 @@ def compare_performance_sources():
 
 def compute_performance_for_band(bande):
     try:
-        # total consumption kg
-        total_cons = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=bande.id).scalar() or 0
-        consommation_par_animal = float(total_cons) / bande.nombre_initial if (bande.nombre_initial and bande.nombre_initial > 0) else 0
+        # Compute per-week consumption (kg) grouped by semaine_production
+        consommations = Consommation.query.filter_by(bande_id=bande.id).all()
+        consum_by_week = {}
+        for c in consommations:
+            w = int(c.semaine_production) if c.semaine_production is not None else None
+            if not w:
+                continue
+            consum_by_week[w] = consum_by_week.get(w, 0) + float(c.aliment_kg or 0)
 
-        # estimate average feed price from actual data if possible (sum cout / sum kg)
-        sum_cout_alim = db.session.query(func.coalesce(func.sum(Consommation.cout_aliment), 0)).filter_by(bande_id=bande.id).scalar() or 0
-        sum_kg = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=bande.id).scalar() or 0
-        avg_feed_price = float(sum_cout_alim) / float(sum_kg) if (sum_kg and sum_kg > 0) else None
+        # Weekly mortality from AnimalInfo (morts_semaine)
+        animal_infos = AnimalInfo.query.filter_by(bande_id=bande.id).all()
+        morts_by_week = {}
+        for a in animal_infos:
+            w = int(a.semaine_production) if a.semaine_production is not None else None
+            if not w:
+                continue
+            morts_by_week[w] = morts_by_week.get(w, 0) + int(a.morts_semaine or 0)
 
-        # water price fallback
-        avg_water_price = 25
-
-        # fallback to reference unit prices if necessary
-        if not avg_feed_price:
-            prices = [r.get('prix_unitaire', 0) for r in CONSUMPTION_REFERENCE]
-            avg_feed_price = sum(prices) / len(prices) if prices else 0
-
-        # reference totals across weeks
-        ref_total_kg = sum([r['aliment_kg'] for r in CONSUMPTION_REFERENCE])
-        ref_total_water = sum([r['eau_litres'] for r in CONSUMPTION_REFERENCE])
-        ref_total_cost = ref_total_kg * float(avg_feed_price) + ref_total_water * float(avg_water_price)
-
-        # actual costs
-        total_cons_cout = sum_cout_alim or 0
-        total_depenses = db.session.query(func.coalesce(func.sum(depense_elt.cout), 0)).filter_by(bande_id=bande.id).scalar() or 0
-        total_traitements = db.session.query(func.coalesce(func.sum(Traitement.cout), 0)).filter_by(bande_id=bande.id).scalar() or 0
-        total_cost = float(total_cons_cout or 0) + float(total_depenses or 0) + float(total_traitements or 0)
-
-        # compute sub-scores (0-100) but only when there is meaningful data
-        cost_perf = None
-        if ref_total_cost > 0 and total_cost and total_cost > 0:
-            cost_perf = ratio_score(ref_total_cost, total_cost)
-
-        ref_per_animal = (ref_total_kg / bande.nombre_initial) if (bande.nombre_initial and bande.nombre_initial > 0) else 0
-        cons_perf = None
-        if ref_per_animal > 0 and consommation_par_animal and consommation_par_animal > 0:
-            cons_perf = ratio_score(ref_per_animal, consommation_par_animal)
-
-        treat_perf = None
-        if ref_total_cost > 0 and total_traitements and total_traitements > 0:
-            treat_perf = ratio_score(ref_total_cost, total_traitements)
-
-        elem_perf = None
-        if ref_total_cost > 0 and total_depenses and total_depenses > 0:
-            elem_perf = ratio_score(ref_total_cost, total_depenses)
-
-        components = {
-            'consommation_par_animal': round(consommation_par_animal, 2),
-            'cout_total': round(total_cost, 2),
-            'cout_aliment': round(total_cons_cout or 0, 2),
-            'cout_traitements': round(total_traitements or 0, 2),
-            'cout_depenses': round(total_depenses or 0, 2),
-            'ref_total_cost': round(ref_total_cost, 2),
-            'ref_total_kg': round(ref_total_kg, 2),
-            'subscores': {
-                'cost': cost_perf,
-                'consumption': cons_perf,
-                'treatment': treat_perf,
-                'elementary': elem_perf
+        initial = bande.nombre_initial or 0
+        if not initial or initial <= 0:
+            # no meaningful baseline
+            return {
+                'consommation_par_poule_par_semaine': {},
+                'mortalite_par_semaine_pct': {},
+                'survie_par_semaine_pct': {},
+                'subscores': {
+                    'consumption': None,
+                    'mortality': None,
+                    'survival': None
+                },
+                'performance_percent': None
             }
+
+        # Determine number of reference weeks to compare (use min of reference length and observed weeks if any)
+        ref_weeks = {r['week']: r for r in CONSUMPTION_REFERENCE}
+        max_ref_week = max(ref_weeks.keys()) if ref_weeks else 0
+        weeks = sorted(set(list(consum_by_week.keys()) + list(morts_by_week.keys()) + list(ref_weeks.keys())))
+
+        # Consumption performance: compare per-poule per-week to reference per-week
+        # margin allowed (fraction): within +/- margin => perfect 100. Outside reduce linearly.
+        margin = 0.05  # 5% margin
+        consumption_per_week_pct = {}
+        for w in weeks:
+            actual_kg = consum_by_week.get(w, 0)
+            actual_per_poule = actual_kg / initial
+            ref = ref_weeks.get(w)
+            ref_kg = ref['aliment_kg'] if ref else None
+            ref_per_poule = (ref_kg / initial) if (ref_kg is not None) else None
+            if ref_per_poule is None or ref_per_poule <= 0:
+                consumption_per_week_pct[w] = None
+                continue
+            deviation = (actual_per_poule - ref_per_poule) / ref_per_poule
+            if abs(deviation) <= margin:
+                perf = 100
+            else:
+                effective = max(0.0, abs(deviation) - margin)
+                # linear decay: 100 -> 0 when effective reaches 1.0 (100% deviation beyond margin)
+                perf = int(max(0, round(100 * (1 - min(1.0, effective)))))
+            consumption_per_week_pct[w] = perf
+
+        # Mortality: per-week percent = (morts_week / initial) * 100; average across weeks with data
+        mortality_week_pct = {}
+        for w in weeks:
+            morts = morts_by_week.get(w, None)
+            if morts is None:
+                mortality_week_pct[w] = None
+            else:
+                mortality_week_pct[w] = (morts / initial) * 100
+
+        mortality_values = [v for v in mortality_week_pct.values() if v is not None]
+        if mortality_values:
+            mortality_avg = sum(mortality_values) / len(mortality_values)
+        else:
+            # fallback to band-level totals if weekly not available
+            mortality_avg = (bande.nombre_morts_totaux or 0) / initial * 100
+
+        mortality_perf = int(max(0, round(100 - mortality_avg)))
+
+        # Survival derived from mortality
+        survival_perf = int(max(0, round(100 - mortality_avg)))
+
+        # Aggregate consumption performance average over weeks with values
+        cons_values = [v for v in consumption_per_week_pct.values() if isinstance(v, (int, float))]
+        consumption_perf = int(round(sum(cons_values) / len(cons_values))) if cons_values else None
+
+        # We no longer expose a separate mortality performance. Survival is derived from mortality
+        # and global performance uses only survival and consumption.
+        subscores = {
+            'consumption': consumption_perf,
+            'survival': survival_perf
         }
 
-        # average of the subscores
-        subs = [v for v in components['subscores'].values() if isinstance(v, (int, float))]
-        perf_percent = int(sum(subs) / len(subs)) if subs else None
-        components['performance_percent'] = perf_percent
-        return components
+        # Global performance is mean of survival and consumption (ignore missing values)
+        available = [v for v in subscores.values() if isinstance(v, (int, float))]
+        perf_percent = int(round(sum(available) / len(available))) if available else None
+
+        return {
+            'consommation_par_poule_par_semaine': {str(k): round(v / initial, 4) if initial else 0 for k, v in consum_by_week.items()},
+            'mortalite_par_semaine_pct': {str(k): (v if v is not None else None) for k, v in mortality_week_pct.items()},
+            'survie_par_semaine_pct': {str(k): (100 - v if v is not None else None) for k, v in mortality_week_pct.items()},
+            'subscores': subscores,
+            'performance_percent': perf_percent
+        }
     except Exception as e:
         # Log and return safe defaults to avoid 500s
         try:
@@ -379,6 +452,32 @@ def compute_performance_for_band(bande):
             },
             'performance_percent': 0
         }
+
+
+@dashboard_bp.route('/references', methods=['GET'])
+def get_references():
+    """Return canonical reference tables used by the frontend to compute performance.
+
+    Response example:
+    {
+      'consumption_reference': [...],
+      'elementary_expenses_reference': [...],
+      'mortality_reference': [...],
+      'survival_reference': {...}
+    }
+    """
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+
+    try:
+        return jsonify({
+            'consumption_reference': CONSUMPTION_REFERENCE,
+            'elementary_expenses_reference': ELEMENTARY_EXPENSES_REFERENCE,
+            'mortality_reference': MORTALITY_REFERENCE,
+            'survival_reference': SURVIVAL_REFERENCE
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 @dashboard_bp.route('/consommation/par_bande', methods=['GET'])
