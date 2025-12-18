@@ -83,7 +83,20 @@
         <div class="header-main">
           <div class="header-title">
             <p class="header-kicker">Tableau de bord</p>
-            <h1>{{ band?.nom || 'Bande' }}</h1>
+            <div class="header-title-row" style="display:flex; align-items:center; gap:12px;">
+              <h1>{{ band?.nom || 'Bande' }}</h1>
+              <div class="band-select" style="display:flex; align-items:center;">
+                <select
+                  v-model="selectedBandId"
+                  @change="onBandSelect"
+                  :disabled="bandsListLoading || !bandsList.length"
+                  aria-label="Sélectionner une bande"
+                >
+                  <option value="" disabled v-if="!bandsList.length">Chargement...</option>
+                  <option v-for="b in bandsList" :key="b.id" :value="b.id">{{ b.nom_bande || b.nom || ('Bande ' + (b.id ?? '—')) }}</option>
+                </select>
+              </div>
+            </div>
             <div class="header-chips">
               <span class="chip ghost">Statut: {{ band?.statut || '—' }}</span>
               <span class="chip ghost">Arrivée: {{ band?.date_arrivee || '—' }}</span>
@@ -1709,6 +1722,10 @@ export default {
       searchResults: [],
       searchFocusedIndex: 0,
       kpi: null,
+      // header band selector
+      bandsList: [],
+      selectedBandId: null,
+      bandsListLoading: false,
       consommations: [],
       consumptionForm: { 
         date: new Date().toISOString().slice(0, 10),
@@ -3222,6 +3239,9 @@ export default {
         
         console.log('Final cleaned band ID for API:', this.id, 'Type:', typeof this.id);
 
+        // Keep header selector in sync with loaded band
+        if (this.id) this.selectedBandId = this.id;
+
         // Charger les dépenses et traitements locaux liés à cette bande
         this.loadExpenseRecordsFromStorage();
         this.loadTreatmentRecordsFromStorage();
@@ -3235,6 +3255,55 @@ export default {
         this.band = null;
         this.id = null;
       }
+    },
+
+    async loadBandsList() {
+      this.bandsListLoading = true;
+      try {
+        const cached = localStorage.getItem('bands_cache');
+        if (cached) {
+          try { this.bandsList = JSON.parse(cached); } catch (e) { /* ignore */ }
+        }
+        if (!this.bandsList || !this.bandsList.length) {
+          try {
+            const resp = await fetch('http://localhost:5000/bandes/', { credentials: 'include' });
+            if (resp.ok) {
+              const data = await resp.json();
+              this.bandsList = Array.isArray(data) ? data : [];
+              try { localStorage.setItem('bands_cache', JSON.stringify(this.bandsList)); } catch (e) { /* ignore */ }
+            }
+          } catch (e) { /* fallback to cache only */ }
+        }
+        if (this.id) this.selectedBandId = this.id;
+        else if (!this.selectedBandId && this.bandsList.length) this.selectedBandId = this.bandsList[0].id;
+      } catch (err) {
+        console.warn('Erreur loadBandsList:', err);
+      } finally {
+        this.bandsListLoading = false;
+      }
+    },
+
+    async onBandSelect() {
+      if (!this.selectedBandId) return;
+      const sel = this.bandsList.find(b => String(b.id) === String(this.selectedBandId));
+      if (!sel) return;
+      const bandData = {
+        id: sel.id,
+        nom_bande: sel.nom_bande || sel.nom || null,
+        date_arrivee: sel.date_arrivee || null,
+        race: sel.race || null,
+        fournisseur: sel.fournisseur || null,
+        nombre_initial: sel.nombre_initial || null,
+        poids_moyen_initial: sel.poids_moyen_initial || null,
+        statut: sel.statut || null,
+        duree_jours: sel.duree_jours || sel.duree || null
+      };
+      try { localStorage.setItem('current_band', JSON.stringify(bandData)); } catch (e) { /* ignore */ }
+      // optionally navigate to band route
+      try { this.$router.push(`/bandes/${sel.id}`); } catch (e) { /* ignore if no router */ }
+      // reload component state for the newly selected band
+      await this.fetchBand();
+      await this.fetchTabData(this.activeTab);
     },
 
     async loadBandDataFromDB() {
@@ -3564,7 +3633,21 @@ export default {
     this._updatePerfMapFromStorage();
 
     this._storageHandler = (e) => {
+      if (!e) return;
       if (e.key === 'band_performance_map') this._updatePerfMapFromStorage();
+      if (e.key === 'bands_cache') {
+        try { this.bandsList = e.newValue ? JSON.parse(e.newValue) : []; } catch (err) { /* ignore */ }
+      }
+      if (e.key === 'current_band') {
+        try {
+          const parsed = e.newValue ? JSON.parse(e.newValue) : null;
+          if (parsed && parsed.id && String(parsed.id) !== String(this.id)) {
+            this.selectedBandId = parsed.id;
+            this.fetchBand();
+            this.fetchTabData(this.activeTab);
+          }
+        } catch (err) { /* ignore */ }
+      }
     };
     window.addEventListener('storage', this._storageHandler);
 
@@ -3582,9 +3665,11 @@ export default {
     };
     window.addEventListener('bandPerformanceUpdated', this._bandPerfUpdatedHandler);
 
-    this.fetchBand().then(() => {
-      // Une fois la bande chargée, charger les consommations
-      this.fetchTabData(this.activeTab);
+    // populate header selector first, then load band & tab data
+    this.loadBandsList().then(() => {
+      this.fetchBand().then(() => {
+        this.fetchTabData(this.activeTab);
+      });
     });
   },
   

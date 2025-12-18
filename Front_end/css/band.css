@@ -292,6 +292,19 @@ button.back:hover { opacity: 1; }
     gap: 12px;
 }
 
+/* Band selector in header */
+.band-select select {
+    min-width: 180px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    background: var(--card-bg);
+    font-size: 14px;
+    color: var(--text-dark);
+}
+
+.band-select select:disabled { opacity: 0.6; }
+
 .back-home {
     border: 1px solid rgba(255, 255, 255, 0.35);
     background: transparent;
