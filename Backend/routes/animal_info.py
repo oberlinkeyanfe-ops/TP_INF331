@@ -6,17 +6,23 @@ import traceback
 animal_info_bp = Blueprint('animal_info', __name__)
 
 
-def _eleveur_id():
-    # TODO: remplacer par l'ID de session réel
-    return session.get('eleveur_id', 1)
+def _require_eleveur():
+    """Return (eleveur_id, None) or (None, (jsonify(...), 401)) if not authenticated."""
+    eleveur_id = session.get('eleveur_id')
+    if not eleveur_id:
+        return None, (jsonify({'error': 'Non connecté'}), 401)
+    return eleveur_id, None
 
 
 @animal_info_bp.route('/bande/<int:bande_id>', methods=['GET'])
 def list_animal_info(bande_id):
+    eleveur_id, auth_err = _require_eleveur()
+    if auth_err:
+        return auth_err
     try:
         infos = AnimalInfo.query.join(Bande).filter(
             AnimalInfo.bande_id == bande_id,
-            Bande.eleveur_id == _eleveur_id()
+            Bande.eleveur_id == eleveur_id
         ).order_by(AnimalInfo.semaine_production.asc()).all()
         return jsonify({
             'count': len(infos),
@@ -28,6 +34,9 @@ def list_animal_info(bande_id):
 
 @animal_info_bp.route('/', methods=['POST'])
 def create_animal_info():
+    eleveur_id, auth_err = _require_eleveur()
+    if auth_err:
+        return auth_err
     try:
         data = request.get_json() or {}
         bande_id = data.get('bande_id')
@@ -36,7 +45,7 @@ def create_animal_info():
             return jsonify({'error': 'bande_id et semaine_production sont requis'}), 400
 
         bande = Bande.query.get_or_404(bande_id)
-        if bande.eleveur_id != _eleveur_id():
+        if bande.eleveur_id != eleveur_id:
             return jsonify({'error': 'Accès refusé'}), 403
 
         # Unicité semaine
@@ -63,10 +72,13 @@ def create_animal_info():
 
 @animal_info_bp.route('/<int:info_id>', methods=['PUT', 'PATCH'])
 def update_animal_info(info_id):
+    eleveur_id, auth_err = _require_eleveur()
+    if auth_err:
+        return auth_err
     try:
         info = AnimalInfo.query.get_or_404(info_id)
         bande = info.bande
-        if not bande or bande.eleveur_id != _eleveur_id():
+        if not bande or bande.eleveur_id != eleveur_id:
             return jsonify({'error': 'Accès refusé'}), 403
 
         data = request.get_json() or {}
@@ -98,10 +110,13 @@ def update_animal_info(info_id):
 
 @animal_info_bp.route('/<int:info_id>', methods=['DELETE'])
 def delete_animal_info(info_id):
+    eleveur_id, auth_err = _require_eleveur()
+    if auth_err:
+        return auth_err
     try:
         info = AnimalInfo.query.get_or_404(info_id)
         bande = info.bande
-        if not bande or bande.eleveur_id != _eleveur_id():
+        if not bande or bande.eleveur_id != eleveur_id:
             return jsonify({'error': 'Accès refusé'}), 403
         db.session.delete(info)
         db.session.commit()

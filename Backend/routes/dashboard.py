@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for
+from flask import Blueprint, request, jsonify, render_template, session, redirect, url_for, current_app
 from modeles.models import db, Bande, Consommation, Traitement, AnimalInfo, depense_elt
 from datetime import datetime, timedelta
 from sqlalchemy import func, extract
@@ -289,9 +289,13 @@ def get_performance_map():
         for b in bandes:
             perf = compute_performance_for_band(b)
             pid = b.id
-            result[str(pid)] = perf.get('performance_percent', 0) if perf.get('performance_percent') is not None else 0
+            # include precise performance_percent (allow None when unknown)
+            result[str(pid)] = perf.get('performance_percent', None)
             # include components
             result[f'components_{pid}'] = perf.get('subscores', {})
+            # include status (e.g., 'no_consumption') when present
+            if perf.get('performance_status') is not None:
+                result[f'status_{pid}'] = perf.get('performance_status')
         return jsonify({'band_performance_map': result})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -347,6 +351,7 @@ def compute_performance_for_band(bande):
         initial = bande.nombre_initial or 0
         if not initial or initial <= 0:
             # no meaningful baseline
+            current_app.logger.debug('compute_performance_for_band: band %s has no initial animals (%s)', getattr(bande, 'id', None), initial)
             return {
                 'consommation_par_poule_par_semaine': {},
                 'mortalite_par_semaine_pct': {},
@@ -364,6 +369,26 @@ def compute_performance_for_band(bande):
         max_ref_week = max(ref_weeks.keys()) if ref_weeks else 0
         weeks = sorted(set(list(consum_by_week.keys()) + list(morts_by_week.keys()) + list(ref_weeks.keys())))
 
+        # Compute mortality_week_pct (safe default even if no consumption data)
+        mortality_week_pct = {}
+        for w in weeks:
+            morts = morts_by_week.get(w, None)
+            if morts is None:
+                mortality_week_pct[w] = None
+            else:
+                mortality_week_pct[w] = (morts / initial) * 100 if initial else None
+
+        # If we have no consumption data at all for this band, treat as 'no data' and do not compute a performance
+        if not consum_by_week:
+            current_app.logger.debug('compute_performance_for_band: band %s has no consumption data, skipping performance', getattr(bande, 'id', None))
+            return {
+                'consommation_par_poule_par_semaine': {},
+                'mortalite_par_semaine_pct': {str(k): (v if v is not None else None) for k, v in mortality_week_pct.items()},
+                'survie_par_semaine_pct': {str(k): (100 - v if v is not None else None) for k, v in mortality_week_pct.items()},
+                'subscores': {'consumption': None, 'survival': None},
+                'performance_percent': None,
+                'performance_status': 'no_consumption'
+            }
         # Consumption performance: compare per-poule per-week to reference per-week
         # margin allowed (fraction): within +/- margin => perfect 100. Outside reduce linearly.
         margin = 0.05  # 5% margin
@@ -420,7 +445,19 @@ def compute_performance_for_band(bande):
 
         # Global performance is mean of survival and consumption (ignore missing values)
         available = [v for v in subscores.values() if isinstance(v, (int, float))]
-        perf_percent = int(round(sum(available) / len(available))) if available else None
+        perf_percent = round(sum(available) / len(available), 1) if available else None  # keep one decimal for precision
+
+        # Debug logging: record intermediate values for traceability
+        try:
+            current_app.logger.debug(
+                "Performance debug for band %s (%s): initial=%s, consum_by_week=%s, morts_by_week=%s, mortality_avg=%s, consumption_per_week_pct=%s, consumption_perf=%s, survival_perf=%s, subscores=%s, perf_percent=%s",
+                getattr(bande, 'id', None), getattr(bande, 'nom_bande', None), initial,
+                consum_by_week, morts_by_week, (mortality_avg if 'mortality_avg' in locals() else None),
+                consumption_per_week_pct, consumption_perf, survival_perf, subscores, perf_percent
+            )
+        except Exception:
+            # logging must not break main flow
+            current_app.logger.exception('Failed to log performance debug for band %s', getattr(bande, 'id', None))
 
         return {
             'consommation_par_poule_par_semaine': {str(k): round(v / initial, 4) if initial else 0 for k, v in consum_by_week.items()},
@@ -432,10 +469,13 @@ def compute_performance_for_band(bande):
     except Exception as e:
         # Log and return safe defaults to avoid 500s
         try:
-            from flask import current_app
             current_app.logger.exception('Error computing performance for band %s: %s', bande.id if hasattr(bande, 'id') else str(bande), e)
         except Exception:
-            print('Error computing performance for band', getattr(bande, 'id', str(bande)), e)
+            # Fall back to print if logger unavailable
+            try:
+                print('Error computing performance for band', getattr(bande, 'id', str(bande)), e)
+            except Exception:
+                pass
         return {
             'consommation_par_animal': 0,
             'cout_total': 0,
@@ -477,6 +517,135 @@ def get_references():
             'survival_reference': SURVIVAL_REFERENCE
         })
     except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/performance/global', methods=['GET'])
+def get_global_performance():
+    """Return a weighted global performance across all bands (weighted by nombre_initial)."""
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        bandes = Bande.query.filter_by(eleveur_id=session['eleveur_id']).all()
+        total_animals = sum((b.nombre_initial or 0) for b in bandes)
+        if total_animals == 0:
+            return jsonify({'global_performance_percent': None, 'components': {}})
+
+        weighted_sum = 0.0
+        weighted_count = 0.0
+        comp_acc = {}
+        comp_weights = {}
+        for b in bandes:
+            perf = compute_performance_for_band(b)
+            perf_percent = perf.get('performance_percent')
+            if isinstance(perf_percent, (int, float)):
+                w = (b.nombre_initial or 0)
+                weighted_sum += perf_percent * w
+                weighted_count += w
+            # aggregate subscores
+            subs = perf.get('subscores') or {}
+            for k, v in subs.items():
+                if v is None: continue
+                comp_acc[k] = comp_acc.get(k, 0) + v * (b.nombre_initial or 0)
+                comp_weights[k] = comp_weights.get(k, 0) + (b.nombre_initial or 0)
+
+        global_perf = int(round(weighted_sum / weighted_count)) if weighted_count > 0 else None
+        components = {}
+        for k, total in comp_acc.items():
+            if comp_weights.get(k):
+                components[k] = int(round(total / comp_weights.get(k)))
+            else:
+                components[k] = None
+
+        return jsonify({'global_performance_percent': global_perf, 'components': components})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@dashboard_bp.route('/performance/debug', methods=['GET'])
+def performance_debug():
+    """Return detailed diagnostics for performance computation per band (for debugging)."""
+    if 'eleveur_id' not in session:
+        return jsonify({'error': 'Non connecté'}), 401
+    try:
+        bandes = Bande.query.filter_by(eleveur_id=session['eleveur_id']).all()
+        result = []
+        for b in bandes:
+            try:
+                # Recompute diagnostics similarly to compute_performance_for_band but return more details
+                consommations = Consommation.query.filter_by(bande_id=b.id).all()
+                consum_by_week = {}
+                for c in consommations:
+                    w = int(c.semaine_production) if c.semaine_production is not None else None
+                    if not w: continue
+                    consum_by_week[w] = consum_by_week.get(w, 0) + float(c.aliment_kg or 0)
+
+                animal_infos = AnimalInfo.query.filter_by(bande_id=b.id).all()
+                morts_by_week = {}
+                for a in animal_infos:
+                    w = int(a.semaine_production) if a.semaine_production is not None else None
+                    if not w: continue
+                    morts_by_week[w] = morts_by_week.get(w, 0) + int(a.morts_semaine or 0)
+
+                initial = b.nombre_initial or 0
+                # compute mortality avg (weekly or fallback)
+                mortality_values = []
+                for v in ( (morts_by_week.get(w) / initial * 100) for w in morts_by_week.keys() ):
+                    if v is not None: mortality_values.append(v)
+                if mortality_values:
+                    mortality_avg = sum(mortality_values) / len(mortality_values)
+                else:
+                    mortality_avg = (b.nombre_morts_totaux or 0) / initial * 100 if initial else None
+
+                # consumption per week pct relative to reference
+                ref_weeks = {r['week']: r for r in CONSUMPTION_REFERENCE}
+                consumption_per_week_pct = {}
+                for w in sorted(set(list(consum_by_week.keys()) + list(ref_weeks.keys()))):
+                    actual_kg = consum_by_week.get(w, 0)
+                    actual_per_poule = actual_kg / initial if initial else None
+                    ref = ref_weeks.get(w)
+                    ref_kg = ref['aliment_kg'] if ref else None
+                    ref_per_poule = (ref_kg / initial) if (ref_kg is not None and initial) else None
+                    if ref_per_poule is None or ref_per_poule <= 0 or actual_per_poule is None:
+                        consumption_per_week_pct[w] = None
+                    else:
+                        deviation = (actual_per_poule - ref_per_poule) / ref_per_poule
+                        margin = 0.05
+                        if abs(deviation) <= margin:
+                            perf = 100
+                        else:
+                            effective = max(0.0, abs(deviation) - margin)
+                            perf = int(max(0, round(100 * (1 - min(1.0, effective)))))
+                        consumption_per_week_pct[w] = perf
+
+                consumption_values = [v for v in consumption_per_week_pct.values() if isinstance(v, (int, float))]
+                consumption_perf = int(round(sum(consumption_values) / len(consumption_values))) if consumption_values else None
+
+                survival_perf = int(max(0, round(100 - (mortality_avg or 0)))) if mortality_avg is not None else None
+
+                subscores = {'consumption': consumption_perf, 'survival': survival_perf}
+                perf_percent = int(round(sum([v for v in subscores.values() if isinstance(v, (int, float))]) / len([v for v in subscores.values() if isinstance(v, (int, float))]))) if any(isinstance(v, (int, float)) for v in subscores.values()) else None
+
+                result.append({
+                    'bande_id': b.id,
+                    'nom_bande': b.nom_bande,
+                    'initial': initial,
+                    'consum_by_week': consum_by_week,
+                    'morts_by_week': morts_by_week,
+                    'mortality_avg': mortality_avg,
+                    'consumption_per_week_pct': consumption_per_week_pct,
+                    'consumption_perf': consumption_perf,
+                    'survival_perf': survival_perf,
+                    'subscores': subscores,
+                    'performance_percent': perf_percent
+                })
+            except Exception as inner_e:
+                current_app.logger.exception('Error building diagnostics for band %s: %s', getattr(b, 'id', None), inner_e)
+                result.append({'bande_id': b.id, 'error': str(inner_e)})
+        current_app.logger.info('Performance debug endpoint called, returning %d bands', len(result))
+        return jsonify({'diagnostics': result})
+    except Exception as e:
+        current_app.logger.exception('performance_debug failed: %s', e)
         return jsonify({'error': str(e)}), 500
 
 
