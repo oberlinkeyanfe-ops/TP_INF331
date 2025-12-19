@@ -173,17 +173,19 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
             # Reference per-week kg (same as dashboard reference)
             REF_KGS = [150, 420, 730, 1100, 1450, 1750, 1950, 2050]
 
-            # For active bands, do not fill all weeks: keep some weeks unfilled to simulate ongoing bands
-            if b.statut == 'active' and ( (b.duree_jours and int((b.duree_jours + 6) // 7)) or weeks_default ):
-                total_weeks = max(4, int((b.duree_jours + 6) // 7)) if b.duree_jours else weeks_default
-                # leave last 2 weeks empty (or at least 1 week filled)
-                fill_weeks = max(1, total_weeks - 2)
+            # Compute number of weeks and how many to fill
+            if b.statut == 'terminee' and b.duree_jours:
+                weeks = max(4, int((b.duree_jours + 6) // 7))
             else:
-                # finished or archived bands: fill full duration
-                if b.statut == 'terminee' and b.duree_jours:
-                    fill_weeks = max(4, int((b.duree_jours + 6) // 7))
-                else:
-                    fill_weeks = weeks_default
+                weeks = weeks_default
+
+            # For active bands, simulate ongoing batches by leaving last 2 weeks empty
+            if b.statut == 'active' and weeks > 2:
+                fill_weeks = max(1, weeks - 2)
+            else:
+                fill_weeks = weeks
+
+            current_app.logger.debug('seed_full_for_eleveur: band=%s name=%s statut=%s weeks=%s fill_weeks=%s factor=%s', b.id, b.nom_bande, b.statut, weeks, fill_weeks, factor)
 
             for i in range(1, fill_weeks + 1):
                 # animal_info: give realistic weight progression and mortality patterns
