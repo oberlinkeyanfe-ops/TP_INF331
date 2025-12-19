@@ -1046,7 +1046,7 @@
                       </label>
                       <label>
                         Poids moyen (kg)
-                        <input type="number" step="0.01" min="0" v-model.number="animalInfoForm.poids_moyen" />
+                        <input type="number" step="0.01" min="0" max="2" v-model.number="animalInfoForm.poids_moyen" />
                       </label>
                     </div>
 

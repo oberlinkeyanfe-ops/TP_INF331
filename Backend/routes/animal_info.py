@@ -59,6 +59,8 @@ def create_animal_info():
             poids_val = float(poids) if poids is not None else None
             if poids_val and poids_val > 10:
                 poids_val = poids_val / 1000.0
+            if poids_val and poids_val > 2.0:
+                poids_val = 2.0
         except Exception:
             poids_val = None
 
@@ -104,6 +106,8 @@ def update_animal_info(info_id):
                 v = float(data.get('poids_moyen')) if data.get('poids_moyen') is not None else None
                 if v and v > 10:
                     v = v / 1000.0
+                if v and v > 2.0:
+                    v = 2.0
                 info.poids_moyen = v
             except Exception:
                 info.poids_moyen = data.get('poids_moyen')

@@ -21,14 +21,15 @@ def upgrade():
 
     # Update bandes.poids_moyen_initial if values were in grams
     try:
-        op.execute("UPDATE bandes SET poids_moyen_initial = poids_moyen_initial / 1000.0 WHERE poids_moyen_initial IS NOT NULL AND poids_moyen_initial > 100")
+        # convert grams to kg and cap to 2kg
+        op.execute("UPDATE bandes SET poids_moyen_initial = LEAST(poids_moyen_initial / 1000.0, 2.0) WHERE poids_moyen_initial IS NOT NULL AND poids_moyen_initial > 100")
     except Exception:
         # best-effort: ignore if column not present or other issues
         pass
 
     # Update animal_info.poids_moyen (weekly weights)
     try:
-        op.execute("UPDATE animal_info SET poids_moyen = poids_moyen / 1000.0 WHERE poids_moyen IS NOT NULL AND poids_moyen > 100")
+        op.execute("UPDATE animal_info SET poids_moyen = LEAST(poids_moyen / 1000.0, 2.0) WHERE poids_moyen IS NOT NULL AND poids_moyen > 100")
     except Exception:
         pass
 

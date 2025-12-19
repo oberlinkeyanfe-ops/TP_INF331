@@ -245,7 +245,7 @@
                 </select>
 
                 <label>Poids moyen initial (kg)</label>
-                <input v-model.number="form.poids_moyen_initial" type="number" step="0.01" placeholder="Ex: 0.04" min="0" />
+                <input v-model.number="form.poids_moyen_initial" type="number" step="0.01" placeholder="Ex: 0.04" min="0" max="2" />
               </div>
               <div class="form-group">
                 <label>Effectif initial</label>

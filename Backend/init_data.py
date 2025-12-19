@@ -52,19 +52,20 @@ def seed_initial_bandes(app, eleveur_id=None, target_email=None):
                 existing_names.add(name)
 
 
+        # Sample bandes with poids_moyen_initial explicitly in kilograms (kg)
         sample_bandes = [
-            {'nom_bande': 'Bande 1 - Excellente', 'days_ago': 60, 'race': 'Cobb 500', 'fournisseur': 'SeedFarm', 'nombre_initial': 120, 'poids_moyen_initial': 30.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 10, 'nombre_morts_totaux': 0, 'cout_unitaire': 1500.0},
-            {'nom_bande': 'Bande 2 - Très bonne', 'days_ago': 50, 'race': 'Ross 308', 'fournisseur': 'AgroSupply', 'nombre_initial': 150, 'poids_moyen_initial': 29.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 12, 'nombre_morts_totaux': 1, 'cout_unitaire': 1480.0},
-            {'nom_bande': 'Bande 3 - Moyenne', 'days_ago': 40, 'race': 'Cobb 500', 'fournisseur': 'Local', 'nombre_initial': 200, 'poids_moyen_initial': 28.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 14, 'nombre_morts_totaux': 2, 'cout_unitaire': 1450.0},
-            {'nom_bande': 'Bande 4 - Faible', 'days_ago': 70, 'race': 'Ross 308', 'fournisseur': 'FarmCo', 'nombre_initial': 100, 'poids_moyen_initial': 26.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 20, 'nombre_morts_totaux': 5, 'cout_unitaire': 1400.0},
-            {'nom_bande': 'Bande 5 - Très faible', 'days_ago': 30, 'race': 'Hubbard', 'fournisseur': 'FermesNord', 'nombre_initial': 90, 'poids_moyen_initial': 25.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 8, 'nombre_morts_totaux': 8, 'cout_unitaire': 1550.0},
-            {'nom_bande': 'Bande 6 - Efficace', 'days_ago': 25, 'race': 'Cobb 500', 'fournisseur': 'SeedFarm', 'nombre_initial': 220, 'poids_moyen_initial': 22.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 7, 'nombre_morts_totaux': 0, 'cout_unitaire': 1200.0},
-            {'nom_bande': 'Bande 7 - Mixte', 'days_ago': 45, 'race': 'Ross 308', 'fournisseur': 'AgroSupply', 'nombre_initial': 140, 'poids_moyen_initial': 27.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 9, 'nombre_morts_totaux': 3, 'cout_unitaire': 1350.0},
-            {'nom_bande': 'Bande 8 - Bonne', 'days_ago': 20, 'race': 'Cobb 500', 'fournisseur': 'Local', 'nombre_initial': 160, 'poids_moyen_initial': 30.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 6, 'nombre_morts_totaux': 1, 'cout_unitaire': 1490.0},
-            {'nom_bande': 'Bande 9 - Surconsommation', 'days_ago': 10, 'race': 'Ross 308', 'fournisseur': 'FarmCo', 'nombre_initial': 130, 'poids_moyen_initial': 24.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 11, 'nombre_morts_totaux': 4, 'cout_unitaire': 1380.0},
-            {'nom_bande': 'Bande 10 - Faible survie', 'days_ago': 80, 'race': 'Hubbard', 'fournisseur': 'FermesNord', 'nombre_initial': 180, 'poids_moyen_initial': 26.5, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 30, 'nombre_morts_totaux': 15, 'cout_unitaire': 1600.0},
-            {'nom_bande': 'Bande 11 - Légère sous-consommation', 'days_ago': 15, 'race': 'Cobb 500', 'fournisseur': 'AgroSupply', 'nombre_initial': 110, 'poids_moyen_initial': 28.5, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 4, 'nombre_morts_totaux': 1, 'cout_unitaire': 1500.0},
-            {'nom_bande': 'Bande 12 - Variable', 'days_ago': 5, 'race': 'Ross 308', 'fournisseur': 'Local', 'nombre_initial': 100, 'poids_moyen_initial': 27.0, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 2, 'nombre_morts_totaux': 2, 'cout_unitaire': 1420.0}
+            {'nom_bande': 'Bande 1 - Excellente', 'days_ago': 60, 'race': 'Cobb 500', 'fournisseur': 'SeedFarm', 'nombre_initial': 120, 'poids_moyen_initial': 0.030, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 10, 'nombre_morts_totaux': 0, 'cout_unitaire': 1500.0},
+            {'nom_bande': 'Bande 2 - Très bonne', 'days_ago': 50, 'race': 'Ross 308', 'fournisseur': 'AgroSupply', 'nombre_initial': 150, 'poids_moyen_initial': 0.029, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 12, 'nombre_morts_totaux': 1, 'cout_unitaire': 1480.0},
+            {'nom_bande': 'Bande 3 - Moyenne', 'days_ago': 40, 'race': 'Cobb 500', 'fournisseur': 'Local', 'nombre_initial': 200, 'poids_moyen_initial': 0.028, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 14, 'nombre_morts_totaux': 2, 'cout_unitaire': 1450.0},
+            {'nom_bande': 'Bande 4 - Faible', 'days_ago': 70, 'race': 'Ross 308', 'fournisseur': 'FarmCo', 'nombre_initial': 100, 'poids_moyen_initial': 0.026, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 20, 'nombre_morts_totaux': 5, 'cout_unitaire': 1400.0},
+            {'nom_bande': 'Bande 5 - Très faible', 'days_ago': 30, 'race': 'Hubbard', 'fournisseur': 'FermesNord', 'nombre_initial': 90, 'poids_moyen_initial': 0.025, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 8, 'nombre_morts_totaux': 8, 'cout_unitaire': 1550.0},
+            {'nom_bande': 'Bande 6 - Efficace', 'days_ago': 25, 'race': 'Cobb 500', 'fournisseur': 'SeedFarm', 'nombre_initial': 220, 'poids_moyen_initial': 0.022, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 7, 'nombre_morts_totaux': 0, 'cout_unitaire': 1200.0},
+            {'nom_bande': 'Bande 7 - Mixte', 'days_ago': 45, 'race': 'Ross 308', 'fournisseur': 'AgroSupply', 'nombre_initial': 140, 'poids_moyen_initial': 0.027, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 9, 'nombre_morts_totaux': 3, 'cout_unitaire': 1350.0},
+            {'nom_bande': 'Bande 8 - Bonne', 'days_ago': 20, 'race': 'Cobb 500', 'fournisseur': 'Local', 'nombre_initial': 160, 'poids_moyen_initial': 0.030, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 6, 'nombre_morts_totaux': 1, 'cout_unitaire': 1490.0},
+            {'nom_bande': 'Bande 9 - Surconsommation', 'days_ago': 10, 'race': 'Ross 308', 'fournisseur': 'FarmCo', 'nombre_initial': 130, 'poids_moyen_initial': 0.024, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 11, 'nombre_morts_totaux': 4, 'cout_unitaire': 1380.0},
+            {'nom_bande': 'Bande 10 - Faible survie', 'days_ago': 80, 'race': 'Hubbard', 'fournisseur': 'FermesNord', 'nombre_initial': 180, 'poids_moyen_initial': 0.0265, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 30, 'nombre_morts_totaux': 15, 'cout_unitaire': 1600.0},
+            {'nom_bande': 'Bande 11 - Légère sous-consommation', 'days_ago': 15, 'race': 'Cobb 500', 'fournisseur': 'AgroSupply', 'nombre_initial': 110, 'poids_moyen_initial': 0.0285, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 4, 'nombre_morts_totaux': 1, 'cout_unitaire': 1500.0},
+            {'nom_bande': 'Bande 12 - Variable', 'days_ago': 5, 'race': 'Ross 308', 'fournisseur': 'Local', 'nombre_initial': 100, 'poids_moyen_initial': 0.027, 'statut': 'active', 'duree_jours': 56, 'age_moyen': 2, 'nombre_morts_totaux': 2, 'cout_unitaire': 1420.0}
         ]
 
         created = 0
@@ -114,6 +115,9 @@ def seed_initial_bandes(app, eleveur_id=None, target_email=None):
 
 def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
     """Populate full time series and records for each band of given eleveur.
+    This function already deletes child records for each band before inserting new ones (idempotent).
+    """
+    """Populate full time series and records for each band of given eleveur.
     - Deletes existing child records (consommations, animal_info, traitements, depenses)
     - Inserts animal_info (weeks), consommations (weekly), 2 traitements, 2 depenses per band
     Returns a dict with counts inserted.
@@ -135,6 +139,36 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
         if not bands:
             return {'error': 'Aucune bande trouvée pour cet eleveur'}
 
+    # end of seed_full_for_eleveur
+
+
+def reset_and_rerun_seed_for_eleveur(app, eleveur_id, weeks_default=12):
+    """Delete all bands and related child records for eleveur, then recreate bands and time-series in kg.
+    Returns a dict with counts from the seed operations.
+    """
+    from modeles.models import Consommation, AnimalInfo, Traitement, depense_elt, Bande, Eleveur
+    with app.app_context():
+        eleveur = Eleveur.query.get(eleveur_id)
+        if not eleveur:
+            return {'error': f'Eleveur id {eleveur_id} introuvable'}
+
+        # Delete child rows and bandes
+        bands = Bande.query.filter_by(eleveur_id=eleveur_id).all()
+        deleted = {'consommations': 0, 'animal_info': 0, 'traitements': 0, 'depenses': 0, 'bands': 0}
+        for b in bands:
+            deleted['consommations'] += Consommation.query.filter_by(bande_id=b.id).delete()
+            deleted['animal_info'] += AnimalInfo.query.filter_by(bande_id=b.id).delete()
+            deleted['traitements'] += Traitement.query.filter_by(bande_id=b.id).delete()
+            deleted['depenses'] += depense_elt.query.filter_by(bande_id=b.id).delete()
+            db.session.delete(b)
+            deleted['bands'] += 1
+        db.session.commit()
+
+        # Recreate initial bands (using seed helper) and re-run full seed
+        seed_res = seed_initial_bandes(app, eleveur_id=eleveur_id)
+        full_res = seed_full_for_eleveur(app, eleveur_id, weeks_default=weeks_default)
+
+        return {'deleted': deleted, 'seed': seed_res, 'full': full_res}
         counts = {'bands': len(bands), 'animal_info': 0, 'consommations': 0, 'traitements': 0, 'depenses': 0}
 
         for b in bands:
@@ -153,10 +187,10 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
                 weeks = weeks_default
 
             deaths = 0
-            base_weight = float(b.poids_moyen_initial or 20.0)
-            # If base_weight looks unusually large, assume it was recorded in grams and convert
-            if base_weight and base_weight > 10:
-                base_weight = base_weight / 1000.0
+            base_weight = float(b.poids_moyen_initial or 20.0)  # kg per bird
+            # Cap per-bird base weight at 2.0 kg
+            if base_weight and base_weight > 2.0:
+                base_weight = 2.0
 
             # Determine a factor based on band name to vary consumption vs reference
             factor_map = {
@@ -198,7 +232,7 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
 
             for i in range(1, fill_weeks + 1):
                 # animal_info: give realistic weight progression and mortality patterns
-                poids = round(base_weight + i * (base_weight * 0.12), 2)
+                poids = round(min(base_weight + i * (base_weight * 0.12), 2.0), 3)  # cap per-bird weekly weight at 2kg
 
                 # Mortality patterns: increase for weak bands
                 if 'Très faible' in (b.nom_bande or ''):
@@ -267,6 +301,39 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
                         bande_id=b.id,
                         date=(b.date_arrivee + timedelta(days=25)),
                         type_depense='Controle',
+                        description='Contrôle intermédiaire (seed)',
+                        duree_heures=1.5,
+                        cout=round(1200 * factor, 2)
+                    )
+                    db.session.add(dep2)
+                    counts['depenses'] += 1
+
+            # add two treatments per band for realism
+            t1 = Traitement(
+                bande_id=b.id,
+                date=(b.date_arrivee + timedelta(days=8)),
+                produit='Multivitamines',
+                type_traitement='Préventif',
+                dosage='1 ml/l',
+                efficacite=0.8,
+                notes='seed',
+                cout=round(300 * factor, 2)
+            )
+            db.session.add(t1)
+            counts['traitements'] += 1
+
+            t2 = Traitement(
+                bande_id=b.id,
+                date=(b.date_arrivee + timedelta(days=22)),
+                produit='Antibiotique',
+                type_traitement='Curatif',
+                dosage='10 mg/kg/j 3 jours',
+                efficacite=0.6,
+                notes='seed',
+                cout=round(500 * factor, 2)
+            )
+            db.session.add(t2)
+            counts['traitements'] += 1
                         description='Vérification sanitaire (seed)',
                         duree_heures=1.5,
                         cout=round(1500 * factor, 2)
