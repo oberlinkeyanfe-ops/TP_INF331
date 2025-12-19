@@ -76,20 +76,26 @@ def seed_initial_bandes(app, eleveur_id=None, target_email=None):
                 # already present for this eleveur, skip
                 continue
 
-            b = Bande(
-                eleveur_id=eleveur.id,
-                nom_bande=name_for_eleveur,
-                date_arrivee=date.today() - timedelta(days=s['days_ago']),
-                race=s.get('race'),
-                fournisseur=s.get('fournisseur'),
-                nombre_initial=s.get('nombre_initial', 100),
-                poids_moyen_initial=s.get('poids_moyen_initial', 0),
-                statut=s.get('statut', 'active'),
-                duree_jours=s.get('duree_jours'),
-                age_moyen=s.get('age_moyen'),
-                nombre_morts_totaux=s.get('nombre_morts_totaux', 0),
-                cout_unitaire=s.get('cout_unitaire')
-            )
+                # Normalize poids_moyen_initial to kg if it looks like grams
+                initial_poids = s.get('poids_moyen_initial', 0)
+                if initial_poids and initial_poids > 10:
+                    # assume value is in grams, convert to kg
+                    initial_poids = float(initial_poids) / 1000.0
+
+                b = Bande(
+                    eleveur_id=eleveur.id,
+                    nom_bande=name_for_eleveur,
+                    date_arrivee=date.today() - timedelta(days=s['days_ago']),
+                    race=s.get('race'),
+                    fournisseur=s.get('fournisseur'),
+                    nombre_initial=s.get('nombre_initial', 100),
+                    poids_moyen_initial=initial_poids,
+                    statut=s.get('statut', 'active'),
+                    duree_jours=s.get('duree_jours'),
+                    age_moyen=s.get('age_moyen'),
+                    nombre_morts_totaux=s.get('nombre_morts_totaux', 0),
+                    cout_unitaire=s.get('cout_unitaire')
+                )
             db.session.add(b)
             created += 1
             created_names.append(name_for_eleveur)
@@ -148,6 +154,9 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
 
             deaths = 0
             base_weight = float(b.poids_moyen_initial or 20.0)
+            # If base_weight looks unusually large, assume it was recorded in grams and convert
+            if base_weight and base_weight > 10:
+                base_weight = base_weight / 1000.0
 
             # Determine a factor based on band name to vary consumption vs reference
             factor_map = {
@@ -170,8 +179,8 @@ def seed_full_for_eleveur(app, eleveur_id, weeks_default=12):
                     factor = v
                     break
 
-            # Reference per-week kg (same as dashboard reference)
-            REF_KGS = [150, 420, 730, 1100, 1450, 1750, 1950, 2050]
+            # Reference per-week consumption values (previously g) — convert to kg
+            REF_KGS = [0.150, 0.420, 0.730, 1.100, 1.450, 1.750, 1.950, 2.050]
 
             # Compute number of weeks and how many to fill
             if b.statut == 'terminee' and b.duree_jours:

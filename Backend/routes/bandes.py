@@ -150,7 +150,11 @@ def create_bande():
             race=data.get('race'),
             fournisseur=data.get('fournisseur'),
             nombre_initial=int(nombre_initial),
-            poids_moyen_initial=float(data.get('poids_moyen_initial', 0) or 0),
+            # Accept legacy inputs in grams: normalize to kg when value looks like grams
+            pmi = float(data.get('poids_moyen_initial', 0) or 0)
+            if pmi and pmi > 10:
+                pmi = pmi / 1000.0
+            poids_moyen_initial=pmi,
             duree_jours=int(data.get('duree_jours') or 0) or None,
             age_moyen=float(data.get('age_moyen', 0) or 0),
             nombre_morts_totaux=int(data.get('nombre_morts_totaux', 0) or 0),
@@ -213,7 +217,17 @@ def update_bande(id):
                 elif key in ['nombre_initial', 'nombre_morts_totaux']:
                     setattr(bande, key, int(value) if value else 0)
                 elif key in ['poids_moyen_initial', 'age_moyen']:
-                    setattr(bande, key, float(value) if value else 0)
+                    # Normalize poids_moyen_initial input (accept grams for backward compatibility)
+                    if key == 'poids_moyen_initial':
+                        try:
+                            v = float(value) if value else 0
+                            if v and v > 10:
+                                v = v / 1000.0
+                        except Exception:
+                            v = 0
+                        setattr(bande, key, v)
+                    else:
+                        setattr(bande, key, float(value) if value else 0)
                 elif key == 'duree_jours':
                     setattr(bande, key, int(value) if value else None)
                 else:

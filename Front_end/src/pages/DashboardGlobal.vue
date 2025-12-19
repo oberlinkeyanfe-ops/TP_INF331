@@ -86,6 +86,13 @@
             </div>
           </div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-icon bg-blue-100 text-blue-600">📈</div>
+          <div>
+            <div class="kpi-value">{{ globalPerformance !== null ? (globalPerformance + '%') : '—' }}</div>
+            <div class="kpi-label">Performance Globale</div>
+          </div>
+        </div>
       </div>
 
       <!-- 2. Smart Insights / Predictions (12 columns) -->
@@ -182,10 +189,20 @@
           <div class="chart-card">
             <div class="card-header">
               <h3>📈 Courbe de Croissance</h3>
-              <p>Poids moyen (g) vs Semaine</p>
+              <p>Poids moyen (kg) vs Semaine</p>
             </div>
             <div class="chart-container">
-              <GlobalTrendsLine :trendData="dashboardData?.weight_trend || []" color="#10b981" />
+              <div class="chart-header-inline" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+                <label style="font-weight:600;color:#6b7280;">Bande</label>
+                <select v-model="selectedGrowthBandId" @change="onSelectGrowthBand" class="custom-select" style="min-width:200px;padding:6px;border-radius:8px;border:1px solid var(--border);">
+                  <option value="">Toutes les bandes (moyenne)</option>
+                  <option v-for="b in bandsForSelector" :key="b.bande_id || b.id" :value="b.bande_id || b.id">{{ b.nom_bande || b.nom_bande }}</option>
+                </select>
+                <div style="margin-left:auto;color:var(--muted);font-size:0.9rem">Affiche la courbe pour la bande sélectionnée</div>
+              </div>
+
+              <GlobalTrendsLine :trendData="growthTrendData" color="#10b981" />
+              <div v-if="growthLoading" style="color:var(--muted); font-size:0.95rem;margin-top:8px">Chargement…</div>
             </div>
           </div>
 
@@ -304,7 +321,7 @@
                   <td>{{ bande.consommation_par_animal }} kg</td>
                   <td>{{ formatCurrency(bande.gains) }}</td>
                   <td>
-                    <div class="score-circle" :style="{borderColor: getScoreColor(bande.score)}">{{ Math.round(bande.score * 10) / 10 }}</div>
+                    <div class="score-circle" :style="{borderColor: getScoreColor(bande.score)}">{{ getBandScoreDisplay(bande) }}</div>
                   </td>
                   <td>
                     <span class="recommendation-text" :class="getRecommendationClass(bande)">
@@ -369,7 +386,14 @@ export default {
       tableSearch: '',
       tableSort: 'performance',
       avgGrowthRate: 0,
-      estWeeksToTarget: 0
+      estWeeksToTarget: 0,
+      globalPerformance: null,
+
+      // Growth chart per-band
+      selectedGrowthBandId:'',
+      growthLabels: [],
+      growthSeries: [],
+      growthLoading: false
     };
   },
   watch: {
@@ -419,6 +443,19 @@ export default {
       });
 
       return data;
+    },
+    // Bands available for the growth selector (prefer performanceData, else coutsData)
+    bandsForSelector() {
+      if (this.performanceData && this.performanceData.length) return this.performanceData;
+      if (this.coutsData && this.coutsData.length) return this.coutsData;
+      return [];
+    },
+    // Growth trend to feed the GlobalTrendsLine: per-band if selected, else aggregated dashboard weight_trend
+    growthTrendData() {
+      if (this.growthSeries && this.growthSeries.length) {
+        return this.growthLabels.map((lbl, idx) => ({ week: Number(lbl.replace(/^S/, '')) || idx + 1, mean_weight: this.growthSeries[idx] || 0 }));
+      }
+      return this.dashboardData?.weight_trend || [];
     }
   },
   methods: {
@@ -433,23 +470,33 @@ export default {
     applyLocalPerformanceMap() {
       try {
         const raw = localStorage.getItem('band_performance_map');
-        if (!raw) return;
+        if (!raw) {
+          console.log('applyLocalPerformanceMap: no map in localStorage');
+          return;
+        }
         const map = JSON.parse(raw);
         if (!map || typeof map !== 'object') return;
+        console.log('applyLocalPerformanceMap: applying map', map);
         // Apply map to performanceData entries
         this.performanceData = (this.performanceData || []).map(b => {
           const id = Number(b.bande_id || b.bandeId || b.id);
           if (!id) return b;
-          if (typeof map[id] === 'number') {
-            return { ...b, performance_percent: map[id], score: map[id] };
+          // prefer explicit numeric mapping
+          if (Object.prototype.hasOwnProperty.call(map, String(id)) && typeof map[String(id)] === 'number') {
+            const val = Number(map[String(id)]);
+            return { ...b, performance_percent: val, score: val, performance_status: null };
           }
           // also accept components_{id}
           const compKey = `components_${id}`;
-          if (map[compKey]) {
-            // compute average if needed
+          if (Object.prototype.hasOwnProperty.call(map, compKey) && map[compKey]) {
             const subs = Object.values(map[compKey]).filter(v => typeof v === 'number');
             const avg = subs.length ? Math.round(subs.reduce((a, c) => a + c, 0) / subs.length) : null;
-            if (avg !== null) return { ...b, performance_percent: avg, score: avg };
+            if (avg !== null) return { ...b, performance_percent: avg, score: avg, performance_status: null };
+          }
+          // check for status_{id}
+          const statusKey = `status_${id}`;
+          if (Object.prototype.hasOwnProperty.call(map, statusKey)) {
+            return { ...b, performance_percent: null, score: null, performance_status: map[statusKey] };
           }
           return b;
         });
@@ -461,6 +508,35 @@ export default {
         console.warn('applyLocalPerformanceMap failed', e);
       }
     },
+
+
+    // Fetch and update growth data for selected band
+    async onSelectGrowthBand() {
+      const id = this.selectedGrowthBandId;
+      if (!id) {
+        this.growthLabels = [];
+        this.growthSeries = [];
+        this.calculateProjections();
+        return;
+      }
+
+      try {
+        this.growthLoading = true;
+        const res = await api.get(`/animal-info/bande/${id}`);
+        const infos = Array.isArray(res.animal_info) ? res.animal_info : [];
+        infos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
+        this.growthLabels = infos.map(i => `S${i.semaine_production}`);
+        this.growthSeries = infos.map(i => (typeof i.poids_moyen === 'number' ? i.poids_moyen : (i.poids_moyen ? Number(i.poids_moyen) : 0)));
+        this.calculateProjections();
+      } catch (e) {
+        console.error('Erreur onSelectGrowthBand:', e);
+        this.growthLabels = [];
+        this.growthSeries = [];
+      } finally {
+        this.growthLoading = false;
+      }
+    },
+
     
     getMortalityClass(val) {
       if (val < 2) return 'bg-success';
@@ -468,19 +544,25 @@ export default {
       return 'bg-danger';
     },
     getScoreColor(score) {
+      if (typeof score !== 'number') return '#9ca3af';
       if (score > 80) return '#10b981';
       if (score > 50) return '#f59e0b';
       return '#ef4444';
     },
+    getBandScoreDisplay(bande) {
+      if (bande && bande.performance_status === 'no_consumption') return '∞';
+      if (bande && typeof bande.score === 'number') return Math.round(bande.score * 10) / 10;
+      return '—';
+    },
     getRecommendation(bande) {
       if (bande.taux_mortalite > 5) return '🚨 Vérifier Protocole Sanitaire';
       if (bande.consommation_par_animal > 5 && bande.taux_mortalite < 2) return '📉 Optimiser Ration (Gaspillage?)';
-      if (bande.score > 80) return '⭐ Modèle à reproduire';
+      if (typeof bande.score === 'number' && bande.score > 80) return '⭐ Modèle à reproduire';
       return '✔️ Performance Standard';
     },
     getRecommendationClass(bande) {
       if (bande.taux_mortalite > 5) return 'text-danger';
-      if (bande.score > 80) return 'text-success';
+      if (typeof bande.score === 'number' && bande.score > 80) return 'text-success';
       return 'text-muted';
     },
 
@@ -513,8 +595,19 @@ export default {
             this.performanceData = perf.performance || perf || [];
           } catch (e) { console.warn('Perf fallback failed'); }
         }
+        console.log('Dashboard: performanceData after fetch', this.performanceData);
 
-        // 2.5 Apply local precomputed performance map if present (override server values)
+        // 2.5 Fetch authoritative performance map from backend and persist
+        try {
+          const mapResp = await api.get('/dashboard/performance/map');
+          const mapObj = (mapResp && mapResp.band_performance_map) ? mapResp.band_performance_map : {};
+          try { localStorage.setItem('band_performance_map', JSON.stringify(mapObj)); } catch (e) { /* ignore */ }
+          console.log('Dashboard: fetched band_performance_map from backend', mapObj);
+        } catch (e) {
+          console.warn('Failed to fetch performance map from backend for dashboard', e);
+        }
+
+        // Apply local precomputed performance map if present (override server values)
         this.applyLocalPerformanceMap();
 
 
@@ -534,12 +627,28 @@ export default {
         this.computeScoresAndBestBand();
         this.calculateProjections();
 
+        // Set default growth band selector if none (prefer performanceData then coutsData)
+        try {
+          const source = (this.performanceData && this.performanceData.length) ? this.performanceData : (this.coutsData && this.coutsData.length ? this.coutsData : []);
+          if (source.length && !this.selectedGrowthBandId) {
+            // default to first band
+            this.selectedGrowthBandId = source[0].bande_id || source[0].id || '';
+            await this.onSelectGrowthBand();
+          }
+        } catch (e) { /* ignore */ }
+
         // 6. Fetch Best Band Details for Recommendation
         if (this.bestBand && this.bestBand.bande_id) {
           try {
             this.bestBandDetails = await api.get(`/dashboard/bande/details/${this.bestBand.bande_id}`);
           } catch (e) { console.warn(e); }
         }
+
+        // Fetch global performance (weighted) and set KPI
+        try {
+          const gp = await api.get('/dashboard/performance/global');
+          if (gp && gp.global_performance_percent !== undefined) this.globalPerformance = gp.global_performance_percent;
+        } catch (e) { console.warn('Failed to fetch global performance', e); }
 
         // Listen for local storage perf map updates and re-apply if they occur
         if (!this._storageListenerAdded) {
@@ -556,6 +665,34 @@ export default {
         this.loadingDashboard = false;
       }
     },
+
+    // Fetch and update growth data for selected band
+    async onSelectGrowthBand() {
+      const id = this.selectedGrowthBandId;
+      if (!id) {
+        this.growthLabels = [];
+        this.growthSeries = [];
+        this.calculateProjections();
+        return;
+      }
+
+      try {
+        this.growthLoading = true;
+        const res = await api.get(`/animal-info/bande/${id}`);
+        const infos = Array.isArray(res.animal_info) ? res.animal_info : [];
+        infos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
+        this.growthLabels = infos.map(i => `S${i.semaine_production}`);
+        this.growthSeries = infos.map(i => (typeof i.poids_moyen === 'number' ? i.poids_moyen : (i.poids_moyen ? Number(i.poids_moyen) : 0)));
+        this.calculateProjections();
+      } catch (e) {
+        console.error('Erreur onSelectGrowthBand:', e);
+        this.growthLabels = [];
+        this.growthSeries = [];
+      } finally {
+        this.growthLoading = false;
+      }
+    },
+
 
     buildQueryString() {
       const parts = [];
@@ -595,14 +732,20 @@ export default {
       const sorted = [...valid].sort((a, b) => (b.score || 0) - (a.score || 0));
       this.bestBand = sorted[0];
       if (this.bestBand) this.bestBand.performancePercent = Math.round(this.bestBand.score || 0);
+
+      // ensure growth selector options reflect current bands
+      // no-op here; we will use a computed that picks from performanceData/coutsData
     },
 
 
     calculateProjections() {
-      // Simple linear projection based on weight trend
-      const trends = this.dashboardData?.weight_trend || [];
-      if (trends.length < 2) { this.avgGrowthRate = 0; return; }
-      
+      // Simple linear projection based on weight trend (use growthTrendData computed)
+      const trends = this.growthTrendData || [];
+      if (trends.length < 2) {
+        this.avgGrowthRate = 0;
+        return;
+      }
+
       // Avg growth per week (last few points)
       const last = trends[trends.length - 1];
       const prev = trends[0]; // simplistic over total period
@@ -610,7 +753,7 @@ export default {
       if (weeks > 0) {
         this.avgGrowthRate = Math.round((last.mean_weight - prev.mean_weight) / weeks);
       }
-      
+
       const targetWeight = 2500; // Example target for broilers
       if (last.mean_weight < targetWeight && this.avgGrowthRate > 0) {
         this.estWeeksToTarget = Math.ceil((targetWeight - last.mean_weight) / this.avgGrowthRate);
