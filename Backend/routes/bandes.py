@@ -174,6 +174,17 @@ def create_bande():
         if pmi and pmi > 2.0:
             pmi = 2.0
 
+        prix_achat = float(data.get('prix_achat_unitaire') or 0.0)
+        # Support frontend sending 'duree_semaines' — convert to days for storage
+        duree_semaines = data.get('duree_semaines')
+        try:
+            if duree_semaines is not None and str(duree_semaines) != '':
+                duree_jours = int(float(duree_semaines)) * 7
+            else:
+                duree_jours = int(data.get('duree_jours') or 0) or None
+        except Exception:
+            duree_jours = int(data.get('duree_jours') or 0) or None
+
         bande = Bande(
             eleveur_id=eleveur_id,
             nom_bande=nom_bande,
@@ -182,10 +193,11 @@ def create_bande():
             fournisseur=data.get('fournisseur'),
             nombre_initial=int(nombre_initial),
             poids_moyen_initial=pmi,
-            duree_jours=int(data.get('duree_jours') or 0) or None,
+            duree_jours=duree_jours,
             age_moyen=float(data.get('age_moyen', 0) or 0),
             nombre_morts_totaux=int(data.get('nombre_morts_totaux', 0) or 0),
-            statut=data.get('statut', 'active')
+            statut=data.get('statut', 'active'),
+            prix_achat_unitaire=prix_achat
         )
 
         db.session.add(bande)
@@ -424,6 +436,20 @@ def sync_all_compteurs():
         return jsonify({'success': True, 'updated_count': 0, 'message': 'Compteur supprimé (animaux retirés)'});
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@bandes_bp.route('/terminate-finished', methods=['POST'])
+def terminate_finished():
+    """Déclenche la vérification et la terminaison des bandes arrivées à leur date de fin.
+    Accessible en POST (admin) : retourne {'updated_count': N, 'updated_ids': [...]}
+    """
+    try:
+        from services.auto_termination import terminate_finished_bandes
+        res = terminate_finished_bandes()
+        return jsonify(res)
+    except Exception as e:
+        print('Error terminating finished bands:', e)
         return jsonify({'error': str(e)}), 500
 
 

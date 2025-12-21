@@ -127,11 +127,24 @@ export default {
     buildReferenceCumul(length) {
       if (length === 0) return [];
       const ref = [];
-      let acc = 0;
+      const base = this.band?.consumptionReference || [];
+      const population = Number(this.band?.nombre_initial || 0) || 0;
       for (let i = 0; i < length; i += 1) {
-        const weekly = 1.4 + i * 0.6;
-        acc += weekly;
-        ref.push(parseFloat(acc.toFixed(2)));
+        const week = i + 1;
+        const refWeek = base.find(r => r.week === week) || null;
+        if (refWeek && refWeek.cumulative_low != null && refWeek.cumulative_high != null && population) {
+          const avgCumul = (Number(refWeek.cumulative_low) + Number(refWeek.cumulative_high)) / 2.0;
+          ref.push(parseFloat((avgCumul * population).toFixed(2)));
+        } else if (refWeek && refWeek.aliment_kg != null) {
+          // fallback: use cumulative as sum of aliment_kg up to this week
+          const prev = ref[i - 1] || 0;
+          ref.push(prev + Number(refWeek.aliment_kg || 0));
+        } else {
+          // fallback heuristic
+          const prev = ref[i - 1] || 0;
+          const weekly = 1.4 + i * 0.6;
+          ref.push(parseFloat(((prev || 0) + weekly).toFixed(2)));
+        }
       }
       return ref;
     }

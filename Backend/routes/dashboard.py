@@ -5,17 +5,28 @@ from sqlalchemy import func, extract
 
 dashboard_bp = Blueprint('dashboard', __name__)
 
-# Reference consumption per week (same as frontend)
+# Reference consumption per week (same as frontend) — now expressed as per-bird ranges and cumulative ranges
 CONSUMPTION_REFERENCE = [
-    {'week': 1, 'aliment_kg': 150, 'eau_litres': 300, 'prix_unitaire': 0.45},
-    {'week': 2, 'aliment_kg': 420, 'eau_litres': 640, 'prix_unitaire': 0.45},
-    {'week': 3, 'aliment_kg': 730, 'eau_litres': 980, 'prix_unitaire': 0.48},
-    {'week': 4, 'aliment_kg': 1100, 'eau_litres': 1350, 'prix_unitaire': 0.5},
-    {'week': 5, 'aliment_kg': 1450, 'eau_litres': 1680, 'prix_unitaire': 0.52},
-    {'week': 6, 'aliment_kg': 1750, 'eau_litres': 1900, 'prix_unitaire': 0.55},
-    {'week': 7, 'aliment_kg': 1950, 'eau_litres': 2050, 'prix_unitaire': 0.58},
-    {'week': 8, 'aliment_kg': 2050, 'eau_litres': 2150, 'prix_unitaire': 0.6}
+    {'week': 1, 'per_bird_low': 0.13, 'per_bird_high': 0.167, 'cumulative_low': 0.13, 'cumulative_high': 0.167, 'eau_litres': 300},
+    {'week': 2, 'per_bird_low': 0.28, 'per_bird_high': 0.375, 'cumulative_low': 0.42, 'cumulative_high': 0.542, 'eau_litres': 640},
+    {'week': 3, 'per_bird_low': 0.47, 'per_bird_high': 0.65, 'cumulative_low': 0.88, 'cumulative_high': 1.192, 'eau_litres': 980},
+    {'week': 4, 'per_bird_low': 0.64, 'per_bird_high': 0.945, 'cumulative_low': 1.55, 'cumulative_high': 2.137, 'eau_litres': 1350},
+    {'week': 5, 'per_bird_low': 0.85, 'per_bird_high': 1.215, 'cumulative_low': 2.40, 'cumulative_high': 3.352, 'eau_litres': 1680},
+    {'week': 6, 'per_bird_low': 1.07, 'per_bird_high': 1.434, 'cumulative_low': 3.45, 'cumulative_high': 4.786, 'eau_litres': 1900},
+    {'week': 7, 'per_bird_low': 1.18, 'per_bird_high': 1.593, 'cumulative_low': 4.66, 'cumulative_high': 6.379, 'eau_litres': 2050},
+    {'week': 8, 'per_bird_low': 1.30, 'per_bird_high': 1.691, 'cumulative_low': 5.96, 'cumulative_high': 8.07, 'eau_litres': 2150}
 ]
+
+# Helper: compute per-band aliment kg from per-bird ref when available
+def compute_ref_kg_for_week(ref_weeks_dict, week, population):
+    ref = ref_weeks_dict.get(week)
+    if not ref:
+        return None
+    if 'per_bird_low' in ref and 'per_bird_high' in ref and population:
+        per_bird = (float(ref['per_bird_low']) + float(ref['per_bird_high'])) / 2.0
+        return per_bird * float(population)
+    # fallback to legacy aliment_kg if present
+    return float(ref.get('aliment_kg')) if ref.get('aliment_kg') is not None else None
 
 
 # Elementary expense reference (categories used in frontend)
@@ -397,8 +408,9 @@ def compute_performance_for_band(bande):
             actual_kg = consum_by_week.get(w, 0)
             actual_per_poule = actual_kg / initial
             ref = ref_weeks.get(w)
-            ref_kg = ref['aliment_kg'] if ref else None
-            ref_per_poule = (ref_kg / initial) if (ref_kg is not None) else None
+            # compute ref kg per band using population when per-bird info exists
+            ref_kg = compute_ref_kg_for_week(ref_weeks, w, initial) if initial else (ref.get('aliment_kg') if ref else None)
+            ref_per_poule = (ref_kg / initial) if (ref_kg is not None and initial) else None
             if ref_per_poule is None or ref_per_poule <= 0:
                 consumption_per_week_pct[w] = None
                 continue
@@ -411,7 +423,7 @@ def compute_performance_for_band(bande):
                 perf = int(max(0, round(100 * (1 - min(1.0, effective)))))
             consumption_per_week_pct[w] = perf
 
-        # Mortality: per-week percent = (morts_week / initial) * 100; average across weeks with data
+        # Mortality: per-week percent = (morts_week / initial) * 100 (for diagnostics)
         mortality_week_pct = {}
         for w in weeks:
             morts = morts_by_week.get(w, None)
@@ -420,39 +432,41 @@ def compute_performance_for_band(bande):
             else:
                 mortality_week_pct[w] = (morts / initial) * 100
 
-        mortality_values = [v for v in mortality_week_pct.values() if v is not None]
-        if mortality_values:
-            mortality_avg = sum(mortality_values) / len(mortality_values)
-        else:
-            # fallback to band-level totals if weekly not available
-            mortality_avg = (bande.nombre_morts_totaux or 0) / initial * 100
-
-        mortality_perf = int(max(0, round(100 - mortality_avg)))
-
-        # Survival derived from mortality
-        survival_perf = int(max(0, round(100 - mortality_avg)))
+        # Use total deaths (sum of weekly deaths) to compute the mortality percentage used for performance
+        total_morts = sum((v or 0) for v in morts_by_week.values())
+        mortality_total_pct = (total_morts / initial) * 100 if initial else 0.0
 
         # Aggregate consumption performance average over weeks with values
         cons_values = [v for v in consumption_per_week_pct.values() if isinstance(v, (int, float))]
         consumption_perf = int(round(sum(cons_values) / len(cons_values))) if cons_values else None
 
-        # We no longer expose a separate mortality performance. Survival is derived from mortality
-        # and global performance uses only survival and consumption.
+        # Survival percentage derived from total mortality
+        survival_pct = (100.0 - mortality_total_pct) if (mortality_total_pct is not None) else None
+        survival_perf = int(max(0, round(survival_pct))) if survival_pct is not None else None
+
+        # Expose subscores including explicit mortality total percentage
         subscores = {
             'consumption': consumption_perf,
+            'mortality_total_pct': round(mortality_total_pct, 2) if isinstance(mortality_total_pct, (int, float)) else None,
             'survival': survival_perf
         }
 
-        # Global performance is mean of survival and consumption (ignore missing values)
-        available = [v for v in subscores.values() if isinstance(v, (int, float))]
-        perf_percent = round(sum(available) / len(available), 1) if available else None  # keep one decimal for precision
+        # Global performance uses total mortality in formula: (consumption_perf + (100 - mortality_total_pct)) / 2
+        if consumption_perf is not None and mortality_total_pct is not None:
+            perf_percent = round((consumption_perf + (100.0 - mortality_total_pct)) / 2.0, 1)
+        elif consumption_perf is not None:
+            perf_percent = float(consumption_perf)
+        elif mortality_total_pct is not None:
+            perf_percent = round(100.0 - mortality_total_pct, 1)
+        else:
+            perf_percent = None
 
         # Debug logging: record intermediate values for traceability
         try:
             current_app.logger.debug(
-                "Performance debug for band %s (%s): initial=%s, consum_by_week=%s, morts_by_week=%s, mortality_avg=%s, consumption_per_week_pct=%s, consumption_perf=%s, survival_perf=%s, subscores=%s, perf_percent=%s",
+                "Performance debug for band %s (%s): initial=%s, consum_by_week=%s, morts_by_week=%s, mortality_total_pct=%s, consumption_per_week_pct=%s, consumption_perf=%s, survival_perf=%s, subscores=%s, perf_percent=%s",
                 getattr(bande, 'id', None), getattr(bande, 'nom_bande', None), initial,
-                consum_by_week, morts_by_week, (mortality_avg if 'mortality_avg' in locals() else None),
+                consum_by_week, morts_by_week, (mortality_total_pct if 'mortality_total_pct' in locals() else None),
                 consumption_per_week_pct, consumption_perf, survival_perf, subscores, perf_percent
             )
         except Exception:
@@ -604,7 +618,8 @@ def performance_debug():
                     actual_kg = consum_by_week.get(w, 0)
                     actual_per_poule = actual_kg / initial if initial else None
                     ref = ref_weeks.get(w)
-                    ref_kg = ref['aliment_kg'] if ref else None
+                    # compute ref_kg using per-bird data if available
+                    ref_kg = compute_ref_kg_for_week(ref_weeks, w, initial) if initial else (ref.get('aliment_kg') if ref else None)
                     ref_per_poule = (ref_kg / initial) if (ref_kg is not None and initial) else None
                     if ref_per_poule is None or ref_per_poule <= 0 or actual_per_poule is None:
                         consumption_per_week_pct[w] = None
@@ -687,13 +702,16 @@ def couts_par_bande():
             total_cons_cout = db.session.query(func.coalesce(func.sum(Consommation.cout_aliment), 0)).filter_by(bande_id=b.id).scalar() or 0
             total_depenses = db.session.query(func.coalesce(func.sum(depense_elt.cout), 0)).filter_by(bande_id=b.id).scalar() or 0
             total_traitements = db.session.query(func.coalesce(func.sum(Traitement.cout), 0)).filter_by(bande_id=b.id).scalar() or 0
-            total = float(total_cons_cout or 0) + float(total_depenses or 0) + float(total_traitements or 0)
+            # Purchase cost for initial animals
+            cout_achat_animaux = float((b.prix_achat_unitaire or 0.0) * (b.nombre_initial or 0))
+            total = float(total_cons_cout or 0) + float(total_depenses or 0) + float(total_traitements or 0) + cout_achat_animaux
             result.append({
                 'bande_id': b.id,
                 'nom_bande': b.nom_bande,
                 'cout_aliment': float(total_cons_cout or 0),
                 'cout_depenses': float(total_depenses or 0),
                 'cout_traitements': float(total_traitements or 0),
+                'cout_achat_animaux': cout_achat_animaux,
                 'cout_total': total
             })
         return jsonify({'couts_par_bande': result})
@@ -763,11 +781,14 @@ def dashboard_global_v2():
         for b in perf_rows:
             total_cons = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=b.id).scalar() or 0
             consommation_par_animal = float(total_cons) / b.nombre_initial if b.nombre_initial else 0
-            taux_mortalite = (float(b.nombre_morts_totaux) / b.nombre_initial * 100) if b.nombre_initial else 0
+            # Ensure nombre_morts_totaux is treated as 0 when null so initialized bands show 0% mortality
+            taux_mortalite = (float(b.nombre_morts_totaux or 0) / b.nombre_initial * 100) if b.nombre_initial else 0
             # estimate gains rudimentaire si cout_unitaire disponible
             gains = 0
             if b.cout_unitaire:
                 gains = (b.nombre_initial - (b.nombre_morts_totaux or 0)) * (b.cout_unitaire or 0)
+            # Purchase/initial animal cost (expense)
+            cout_achat_animaux = float((b.prix_achat_unitaire or 0.0) * (b.nombre_initial or 0))
             performance.append({
                 'bande_id': b.id,
                 'nom_bande': b.nom_bande,
@@ -775,7 +796,8 @@ def dashboard_global_v2():
                 'nombre_animaux': b.nombre_initial,
                 'consommation_par_animal': round(consommation_par_animal, 2),
                 'taux_mortalite': round(taux_mortalite, 2),
-                'gains': float(gains)
+                'gains': float(gains),
+                'cout_achat_animaux': cout_achat_animaux
             })
 
         # trends: weight and consumption (respect filters)

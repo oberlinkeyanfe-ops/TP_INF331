@@ -122,6 +122,11 @@ export default {
         const ref = refBase.find(r => r.week === idx + 1);
         if (!ref) return null;
         if (!population) return 0;
+        // Prefer per-bird range when available
+        if (ref.per_bird_low != null && ref.per_bird_high != null) {
+          const perBirdAvg = (Number(ref.per_bird_low) + Number(ref.per_bird_high)) / 2.0;
+          return +perBirdAvg.toFixed(4);
+        }
         return +((ref.aliment_kg || 0) / population).toFixed(4);
       });
 

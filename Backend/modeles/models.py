@@ -56,6 +56,8 @@ class Bande(db.Model):
     age_moyen = db.Column(db.Float)  # en jours ou semaines
     nombre_morts_totaux = db.Column(db.Integer, default=0)  # cumul global
     cout_unitaire = db.Column(db.Float)
+    # Prix d'achat unitaire initial pour chaque poule (FCFA)
+    prix_achat_unitaire = db.Column(db.Float, default=0.0)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -79,7 +81,8 @@ class Bande(db.Model):
             'age_moyen': self.age_moyen,
             'nombre_morts_totaux': self.nombre_morts_totaux,
             'eleveur_id': self.eleveur_id,
-            'cout_unitaire': self.cout_unitaire
+            'cout_unitaire': self.cout_unitaire,
+            'prix_achat_unitaire': float(self.prix_achat_unitaire) if self.prix_achat_unitaire is not None else 0.0
         }
 
 

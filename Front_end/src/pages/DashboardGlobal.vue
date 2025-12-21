@@ -73,16 +73,16 @@
         <div class="kpi-card">
           <div class="kpi-icon bg-teal-100 text-teal-600">💰</div>
           <div>
-            <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex;  align-items:center;">
               <label style="font-size:12px; color:#6b7280;">Bande</label>
-              <select v-model="selectedCoutBandId" class="custom-select" @change="onCoutBandChange">
+              <select v-model="selectedCoutBandId" class="custom-select" @change="onCoutBandChange" style="width: 7vw;">
                 <option value="" disabled v-if="!coutsData.length">Chargement...</option>
                 <option v-for="c in coutsData" :key="c.bande_id" :value="c.bande_id">{{ c.nom_bande }}</option>
               </select>
             </div>
             <div>
               <div class="kpi-value">{{ formatCurrency((selectedBandCost && selectedBandCost.cout_total) || 0) }}</div>
-              <div class="kpi-label">Dépenses (bande sélectionnée)</div>
+              <div class="kpi-label">Dépenses par bande</div>
             </div>
           </div>
         </div>
@@ -134,16 +134,20 @@
             </div>
           </div>
 
-          <!-- Prediction -->
-          <div class="insight-card prediction">
-            <div class="insight-icon"><i class="fas fa-chart-line"></i></div>
+          <!-- Best treatment per disease (based on top-performing bands) -->
+          <div class="insight-card best-treatment">
+            <div class="insight-icon"><i class="fas fa-pills"></i></div>
             <div class="insight-content">
-              <h4>Projection de Croissance</h4>
-              <p>
-                Croissance moy. observée : <strong>{{ avgGrowthRate }}g/semaine</strong>.
-                À ce rythme, les bandes actives atteindront leur poids cible dans ~{{ estWeeksToTarget }} semaines.
-              </p>
-              <div class="insight-tag info">Prévision</div>
+              <h4>Meilleur produit par pathologie (top bandes)</h4>
+              <p v-if="!bestProductsByDisease.length" class="muted">Aucune donnée de traitements disponibles pour les bandes performantes.</p>
+              <ul v-else class="treatment-list">
+                <li v-for="item in bestProductsByDisease" :key="item.disease">
+                  <strong>{{ item.disease }}</strong> —
+                  <span class="prod">{{ item.product }}</span>
+                  <small class="muted">{{ item.avgEffic !== null ? `(efficacité moyenne ${item.avgEffic}%)` : `(utilisé ${item.count} fois)` }}</small>
+                </li>
+              </ul>
+              <div class="insight-tag info">Analyse traitements</div>
             </div>
           </div>
 
@@ -389,6 +393,19 @@ export default {
       estWeeksToTarget: 0,
       globalPerformance: null,
 
+      // Best treatments per disease (computed from top-performing bands)
+      bestProductsByDisease: [],
+      treatmentProductDiseases: {
+        'Baytril': ['salmonellose','colibacillose','entérite'],
+        'Lévomycétine': ['entérite','respiratoire'],
+        'Dithrim': ['respiratoire','entérite'],
+        'Furazolidone': ['entérite'],
+        'Tétracycline': ['respiratoire','digestif'],
+        'Biomycine': ['croissance','prévention'],
+        'Sulfadimezin': ['coccidiose','respiratoire','typhoïde'],
+        'Chlortétracycline': ['coccidiose','pneumonie','mycoplasmose']
+      },
+
       // Growth chart per-band
       selectedGrowthBandId:'',
       growthLabels: [],
@@ -460,6 +477,68 @@ export default {
   },
   methods: {
 
+    async computeBestProductsByDisease() {
+      this.bestProductsByDisease = [];
+      try {
+        const bands = (this.performanceData || []).filter(b => typeof b.score === 'number').sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3);
+        if (!bands.length) return;
+        const prodStats = {};
+        for (const b of bands) {
+          try {
+            const resp = await api.get(`/traitements/bande/${b.bande_id}`);
+            const treatments = Array.isArray(resp) ? resp : (resp.traitements || []);
+            for (const t of treatments) {
+              const prod = (t.produit || t.produit || '').trim();
+              if (!prod) continue;
+              const eff = (t.efficacite != null && !isNaN(Number(t.efficacite))) ? Number(t.efficacite) : null;
+              if (!prodStats[prod]) prodStats[prod] = { sumE: 0, cntE: 0, cnt: 0 };
+              if (eff !== null) { prodStats[prod].sumE += eff; prodStats[prod].cntE += 1; }
+              prodStats[prod].cnt += 1;
+            }
+          } catch (e) {
+            console.warn('Failed fetch treatments for band', b, e);
+          }
+        }
+
+        const diseaseMap = {};
+        for (const prod of Object.keys(prodStats)) {
+          const stat = prodStats[prod];
+          const avg = stat.cntE ? (stat.sumE / stat.cntE) : null;
+          const count = stat.cnt;
+          const diseases = (this.treatmentProductDiseases && this.treatmentProductDiseases[prod]) ? this.treatmentProductDiseases[prod] : [];
+          if (!diseases.length) {
+            const d = 'Général';
+            diseaseMap[d] = diseaseMap[d] || [];
+            diseaseMap[d].push({ product: prod, avgEffic: avg, count });
+          } else {
+            for (const d of diseases) {
+              diseaseMap[d] = diseaseMap[d] || [];
+              diseaseMap[d].push({ product: prod, avgEffic: avg, count });
+            }
+          }
+        }
+
+        const result = [];
+        for (const d of Object.keys(diseaseMap)) {
+          const candidates = diseaseMap[d];
+          candidates.sort((a, b) => {
+            if (a.avgEffic === null && b.avgEffic !== null) return 1;
+            if (b.avgEffic === null && a.avgEffic !== null) return -1;
+            if (a.avgEffic !== null && b.avgEffic !== null) {
+              if (b.avgEffic !== a.avgEffic) return b.avgEffic - a.avgEffic;
+            }
+            return b.count - a.count;
+          });
+          const win = candidates[0];
+          result.push({ disease: d, product: win.product, avgEffic: win.avgEffic !== null ? Math.round(win.avgEffic * 100) / 100 : null, count: win.count });
+        }
+
+        this.bestProductsByDisease = result.sort((a,b) => a.disease.localeCompare(b.disease));
+      } catch (e) {
+        console.warn('computeBestProductsByDisease error', e);
+        this.bestProductsByDisease = [];
+      }
+    },
     onCoutBandChange() {
       // no-op for now — computed selectedBandCost will reflect selection
     },
@@ -626,6 +705,8 @@ export default {
         // 5. Calculations
         this.computeScoresAndBestBand();
         this.calculateProjections();
+        // 5.5 Compute best treatment per disease based on top-performing bands
+        try { await this.computeBestProductsByDisease(); } catch (e) { console.warn('computeBestProductsByDisease failed', e); }
 
         // Set default growth band selector if none (prefer performanceData then coutsData)
         try {
@@ -829,7 +910,11 @@ html { font-size: 1px; }
 .insight-tag.alert { background: #fee2e2; color: #991b1b; }
 .insight-tag.ok { background: #d1fae5; color: #065f46; }
 .insight-tag.info { background: #ede9fe; color: #5b21b6; }
-
+/* Treatment list (best products by disease) — larger, clearer text */
+.treatment-list { margin: 8px 0 12px; padding: 0; list-style: none; }
+.treatment-list li { font-size: 10px; line-height: 1.35; margin-bottom: 6px; color: var(--text-sec); }
+.treatment-list .prod { font-size: 11px; font-weight: 700; margin-left: 6px; color: var(--text-main); }
+.treatment-list small.muted { font-size: 13px; color: #6b7280; margin-left: 8px; }
 /* Charts & Tables */
 .chart-card { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 100%; }
 .card-header { margin-bottom: 20px; }

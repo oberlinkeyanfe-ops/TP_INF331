@@ -94,9 +94,20 @@ export default {
 
       const refCost = Array(durationWeeks).fill(null);
       for (let i = 0; i < durationWeeks; i += 1) {
-        const ref = (this.consumptionReference || []).find(r => r.week === i + 1);
+        const weekNum = i + 1;
+        const ref = (this.consumptionReference || []).find(r => r.week === weekNum);
         if (!ref) continue;
-        const cost = (avgFeedPrice || 0) * (ref.aliment_kg || 0) + (avgWaterPrice || 0) * (ref.eau_litres || 0);
+        // compute per-band aliment total from per-bird when available
+        let alimentKg = 0;
+        const pop = Number(this.band?.nombre_initial || 0) || 0;
+        if (ref.per_bird_low != null && ref.per_bird_high != null) {
+          const perBird = (Number(ref.per_bird_low) + Number(ref.per_bird_high)) / 2.0;
+          alimentKg = perBird * pop;
+        } else {
+          alimentKg = Number(ref.aliment_kg || 0);
+        }
+        const water = Number(ref.eau_litres || 0);
+        const cost = (avgFeedPrice || 0) * alimentKg + (avgWaterPrice || 0) * water;
         refCost[i] = Math.round(cost);
       }
 

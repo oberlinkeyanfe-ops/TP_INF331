@@ -96,13 +96,20 @@ export function computeProfitComputed(vm) {
   const consumptionCosts = Number(vm.totalCost || 0); // consommations
   const treatmentCosts = Number(vm.totalTreatmentCost || 0); // traitements
   const elementaryExpenses = Number(vm.totalExpensesElementaires || 0); // dépenses élémentaires
+  const purchaseCost = Number((vm.band?.prix_achat_unitaire || 0) * (vm.band?.nombre_initial || 0)); // achat initial des poules
 
-  const costs = consumptionCosts + treatmentCosts + elementaryExpenses;
+  const costs = consumptionCosts + treatmentCosts + elementaryExpenses + purchaseCost;
 
   return {
     revenue,
     revenueRef,
     costs,
+    costs_breakdown: {
+      consumptionCosts,
+      treatmentCosts,
+      elementaryExpenses,
+      purchaseCost
+    },
     profit: revenue - costs
   };
 }
