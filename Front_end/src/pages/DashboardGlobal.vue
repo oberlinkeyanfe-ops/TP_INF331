@@ -32,10 +32,16 @@
             <button class="btn-icon" @click="fetchWithCustom" title="Appliquer">OK</button>
           </div>
 
-          <button class="btn btn-primary" @click="fetchNow" :disabled="loadingDashboard">
-            <i class="fas fa-sync-alt" :class="{'spin': loadingDashboard}"></i>
-            {{ loadingDashboard ? 'Analyse en cours...' : 'Actualiser' }}
-          </button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary" @click="fetchNow" :disabled="loadingDashboard">
+              <i class="fas fa-sync-alt" :class="{'spin': loadingDashboard}"></i>
+              {{ loadingDashboard ? 'Analyse en cours...' : 'Actualiser' }}
+            </button>
+            <button class="btn" @click="exportGlobalPdf" :disabled="exportingPdf">
+              <i class="fas fa-file-pdf"></i>
+              {{ exportingPdf ? 'Génération...' : 'Exporter PDF' }}
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -138,10 +144,10 @@
           <div class="insight-card best-treatment">
             <div class="insight-icon"><i class="fas fa-pills"></i></div>
             <div class="insight-content">
-              <h4>Meilleur produit par pathologie (top bandes)</h4>
+              <h4>Meilleur produit par pathologie </h4>
               <p v-if="!bestProductsByDisease.length" class="muted">Aucune donnée de traitements disponibles pour les bandes performantes.</p>
               <ul v-else class="treatment-list">
-                <li v-for="item in bestProductsByDisease" :key="item.disease">
+                <li v-for="item in bestProductsByDisease.slice(0, 3)" :key="item.disease">
                   <strong>{{ item.disease }}</strong> —
                   <span class="prod">{{ item.product }}</span>
                   <small class="muted">{{ item.avgEffic !== null ? `(efficacité moyenne ${item.avgEffic}%)` : `(utilisé ${item.count} fois)` }}</small>
@@ -231,16 +237,21 @@
                 <div v-for="bande in coutsData.slice(0, 5)" :key="bande.bande_id" class="fin-item">
                   <div class="fin-header">
                     <span class="fin-name">{{ bande.nom_bande }}</span>
-                    <span class="fin-total">{{ formatCurrency(bande.cout_total) }}</span>
+                    <div style="text-align:right;">
+                      <div class="fin-total">{{ formatCurrency(bande.cout_total) }}</div>
+                      <div class="fin-sub text-muted">Achat animaux: {{ formatCurrency(bande.cout_achat_animaux || 0) }}</div>
+                    </div>
                   </div>
                   <div class="fin-bar-bg">
                     <div class="fin-bar-segment feed" :style="{width: getPercent(bande.cout_aliment, bande.cout_total) + '%'}" title="Aliment"></div>
                     <div class="fin-bar-segment treat" :style="{width: getPercent(bande.cout_traitements, bande.cout_total) + '%'}" title="Traitements"></div>
+                    <div class="fin-bar-segment achat" :style="{width: getPercent(bande.cout_achat_animaux, bande.cout_total) + '%'}" title="Achat animaux"></div>
                     <div class="fin-bar-segment other" :style="{width: getPercent(bande.cout_depenses, bande.cout_total) + '%'}" title="Autres"></div>
                   </div>
                   <div class="fin-legend-mini">
                     <span class="dot feed"></span> Alim
                     <span class="dot treat"></span> Soins
+                    <span class="dot achat"></span> Achat animaux
                     <span class="dot other"></span> Autre
                   </div>
                 </div>
@@ -354,7 +365,7 @@
 </template>
 
 <script>
-import { api } from '../services/api.js';
+import { api, API_BASE_URL } from '../services/api.js';
 import GlobalComparisonBar from './charts/GlobalComparisonBar.vue';
 import GlobalMortalityBar from './charts/GlobalMortalityBar.vue';
 import GlobalTrendsLine from './charts/GlobalTrendsLine.vue';
@@ -392,6 +403,7 @@ export default {
       avgGrowthRate: 0,
       estWeeksToTarget: 0,
       globalPerformance: null,
+      exportingPdf: false,
 
       // Best treatments per disease (computed from top-performing bands)
       bestProductsByDisease: [],
@@ -476,6 +488,53 @@ export default {
     }
   },
   methods: {
+    async exportGlobalPdf() {
+      if (this.exportingPdf) return;
+      try {
+        this.exportingPdf = true;
+        // Open in new tab to allow browser to handle download & cookies
+        const url = '/dashboard/report/pdf';
+        // Use fetch to download blob from the BACKEND and force download filename
+        const backendUrl = `${API_BASE_URL}/dashboard/report/pdf`;
+        console.debug('Export PDF: fetching', backendUrl);
+        const resp = await fetch(backendUrl, { credentials: 'include' });
+        // If user is not authenticated, redirect to login with helpful message
+        if (resp.status === 401) {
+          alert('Votre session a expiré — veuillez vous reconnecter.');
+          // use router to navigate to the login page
+          if (this.$router) this.$router.push({ name: 'Login' });
+          else window.location.href = '/login';
+          return;
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => null);
+          throw new Error(text || 'Échec de génération du PDF');
+        }
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/pdf')) {
+          // If the server returned HTML or JSON (e.g., session lost), show helpful error
+          const text = await resp.text().catch(() => null);
+          console.error('Export PDF: unexpected content-type', contentType, text);
+          alert('Erreur: le serveur n’a pas renvoyé un PDF valide. Voir console pour détails.');
+          // Fallback: open the URL in a new tab so the browser handles login / download
+          window.open(url, '_blank');
+          return;
+        }
+        const blob = await resp.blob();
+        const filename = resp.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'rapport_global.pdf';
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (e) {
+        console.error('Export PDF failed', e);
+        alert('Erreur lors de la génération du PDF. Vérifiez le serveur.');
+      } finally {
+        this.exportingPdf = false;
+      }
+    },
 
     async computeBestProductsByDisease() {
       this.bestProductsByDisease = [];
@@ -725,11 +784,16 @@ export default {
           } catch (e) { console.warn(e); }
         }
 
+        // end of fetch
+
         // Fetch global performance (weighted) and set KPI
         try {
           const gp = await api.get('/dashboard/performance/global');
           if (gp && gp.global_performance_percent !== undefined) this.globalPerformance = gp.global_performance_percent;
         } catch (e) { console.warn('Failed to fetch global performance', e); }
+
+        // helper available: export PDF of the global report
+        // (no-op here)
 
         // Listen for local storage perf map updates and re-apply if they occur
         if (!this._storageListenerAdded) {
@@ -975,8 +1039,11 @@ html { font-size: 1px; }
 .fin-bar-segment { height: 100%; }
 .fin-bar-segment.feed { background: var(--primary); }
 .fin-bar-segment.treat { background: #f87171; }
+.fin-bar-segment.achat { background: #f59e0b; }
 .fin-bar-segment.other { background: #94a3b8; }
 .fin-legend-mini { display: flex; gap: 12px; margin-top: 4px; font-size: 11px; color: #6b7280; }
+.fin-sub { font-size: 12px; color: #6b7280; margin-top: 4px; }
+.dot.achat { background: #f59e0b; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .dot.feed { background: var(--primary); } .dot.treat { background: #f87171; } .dot.other { background: #94a3b8; }
 

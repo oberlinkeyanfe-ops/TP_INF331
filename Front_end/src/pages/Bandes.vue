@@ -135,8 +135,12 @@
                 <div v-if="item.hint" class="search-hint">{{ item.hint }}</div>
               </li>
             </ul>
-            <button class="ai" :class="{ active: activeTab === 'chatbot' }"
+            <button class="ai" :class="{ active: activeTab === 'chatbot' }" style="margin-right:8px; margin-bottom: 20px; width: 50px;"
             @click="selectTab('chatbot')"></button>
+            <button class="btn" style="width: 120px; height: 40px;font-size: 11px; margin-right:0px;" @click="exportBandPdf" :disabled="exportingBandPdf">
+              <i class="fas fa-file-pdf"></i>
+              {{ exportingBandPdf ? 'Génération...' : 'Exporter' }}
+            </button>
         </div>
       </header>
 
@@ -1706,6 +1710,7 @@ import * as messageMethods from './methods/messageMethods.js';
 import * as traitementsMethods from './methods/traitementsMethods.js';
 import * as depensesMethods from './methods/depensesMethods.js';
 import * as gainsMethods from './methods/gainsMethods.js';
+import { API_BASE_URL } from '../services/api.js';
 
 export default {
   name: 'Bandes',
@@ -1758,6 +1763,7 @@ export default {
         prix_unitaire: 0,
         prix_eau_unitaire: 25
       },
+      exportingBandPdf: false,
       editingConsumptionId: null,
       consumptionFormCostPreview: 0,
       filledWeeks: new Map(),
@@ -3180,6 +3186,47 @@ export default {
       const perf = this.serverPerformance || {};
       const msg = `Performance: ${perf.performance_percent ?? '—'}%\nSubscores: ${perf.subscores ? JSON.stringify(perf.subscores) : '—'}`;
       alert(msg);
+    },
+
+    async exportBandPdf() {
+      if (this.exportingBandPdf) return;
+      if (!this.band || !this.band.id) { alert('Aucune bande sélectionnée'); return; }
+      try {
+        this.exportingBandPdf = true;
+        const backendUrl = `${API_BASE_URL}/dashboard/report/bande/${this.band.id}/pdf`;
+        console.debug('Export Band PDF: fetching', backendUrl);
+        const resp = await fetch(backendUrl, { credentials: 'include' });
+        if (resp.status === 401) {
+          alert('Votre session a expiré — veuillez vous reconnecter.');
+          if (this.$router) this.$router.push({ name: 'Login' }); else window.location.href = '/login';
+          return;
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => null);
+          throw new Error(text || 'Échec de génération du PDF');
+        }
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/pdf')) {
+          const text = await resp.text().catch(() => null);
+          console.error('Export Band PDF: unexpected content-type', contentType, text);
+          alert('Erreur: le serveur n’a pas renvoyé un PDF valide. Voir console pour détails.');
+          window.open(backendUrl, '_blank');
+          return;
+        }
+        const blob = await resp.blob();
+        const filename = resp.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `rapport_bande_${this.band.nom_bande || this.band.id}.pdf`;
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (e) {
+        console.error('Export Band PDF failed', e);
+        alert('Erreur lors de la génération du PDF. Vérifiez le serveur.');
+      } finally {
+        this.exportingBandPdf = false;
+      }
     },
 
     updateCostPreview() { return consommationMethods.updateCostPreview(this); },

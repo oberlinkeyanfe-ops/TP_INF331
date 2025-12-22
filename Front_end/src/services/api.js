@@ -1,6 +1,6 @@
 // src/services/api.js - VERSION SIMPLIFIÉE
 // Use 'localhost' so cookies (session cookie set on login) are included correctly
-const API_BASE_URL = 'http://localhost:5000';
+export const API_BASE_URL = 'http://localhost:5000';
 
 async function apiFetch(endpoint, options = {}) {
   const defaultOptions = {

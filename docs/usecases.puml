@@ -1,0 +1,61 @@
+
+@startuml
+left to right direction
+skinparam packageStyle rectangle
+actor Eleveur as User
+actor Veterinaire as Vet
+actor System
+
+package "Gestion des Bandes" {
+  usecase "Créer / modifier bande" as UC1
+  usecase "Consigner consommation" as UC2
+  usecase "Consigner traitement" as UC3
+  usecase "Voir détail bande" as UC4
+}
+
+package "Analyse & Dashboard" {
+  usecase "Voir tableau de bord" as UC5
+  usecase "Visualiser structure des coûts" as UC6
+  usecase "Générer prédictions" as UC7
+  usecase "Voir classement performances" as UC8
+}
+
+package "Automatisation & Notifications" {
+  usecase "Terminaison automatique" as UC9
+  usecase "Recevoir alertes sanitaires" as UC10
+}
+
+package "Assistant IA" {
+  usecase "Dialoguer avec IA" as UC11
+  usecase "Lancer analyse complète" as UC12
+}
+
+User --> UC1
+User --> UC2
+User --> UC3
+User --> UC4
+User --> UC5
+User --> UC6
+User --> UC7
+User --> UC8
+User --> UC11
+User --> UC12
+
+Vet --> UC3
+Vet --> UC10
+
+System --> UC9
+System --> UC10
+
+UC2 .down.> UC6 : data
+UC3 .down.> UC10 : triggers
+UC7 .down.> UC8 : data
+
+note right of UC5
+ Dashboard centralise :
+  - consommation
+  - mortalité
+  - coûts (achat animaux inclus)
+end note
+
+@enduml

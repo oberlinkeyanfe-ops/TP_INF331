@@ -1029,11 +1029,7 @@ def report_bande_pdf(bande_id):
             story.append(Paragraph('Traitements (récents -> anciens)', styles['Heading3']))
             tr_data = [["Date", "Produit", "Eff(%)", "Coût", "Note"]]
             for tr in traitements:
-                # Some schemas use 'note' while others use 'notes' - be resilient
-                note = getattr(tr, 'note', None)
-                if note is None:
-                    note = getattr(tr, 'notes', None)
-                tr_data.append([tr.date.isoformat() if tr.date else '', tr.produit or '', str(tr.efficacite or ''), f"{int(tr.cout or 0):,}", note or ''])
+                tr_data.append([tr.date.isoformat() if tr.date else '', tr.produit or '', str(tr.efficacite or ''), f"{int(tr.cout or 0):,}", tr.note or ''])
             tr_tab = Table(tr_data, repeatRows=1, hAlign='LEFT')
             tr_tab.setStyle(TableStyle([
                 ('GRID', (0,0), (-1,-1), 0.25, colors.grey),
@@ -1083,45 +1079,3 @@ def bande_details(bande_id):
 
         # Recent treatments (last 5)
         traitements = Traitement.query.filter_by(bande_id=b.id).order_by(Traitement.date.desc()).limit(5).all()
-
-        # Top aliment by total kg
-        top_alim_row = db.session.query(Consommation.type_aliment, func.coalesce(func.sum(Consommation.aliment_kg), 0).label('total_kg')).filter_by(bande_id=b.id).group_by(Consommation.type_aliment).order_by(func.sum(Consommation.aliment_kg).desc()).first()
-        top_aliment = {'type_aliment': None, 'total_kg': 0}
-        if top_alim_row:
-            top_aliment = {'type_aliment': top_alim_row.type_aliment, 'total_kg': float(top_alim_row.total_kg or 0)}
-
-        # consommation totale and per animal
-        total_cons = db.session.query(func.coalesce(func.sum(Consommation.aliment_kg), 0)).filter_by(bande_id=b.id).scalar() or 0
-        consommation_par_animal = float(total_cons) / b.nombre_initial if b.nombre_initial else 0
-
-        # latest mean weight
-        latest_info = AnimalInfo.query.filter_by(bande_id=b.id).order_by(AnimalInfo.semaine_production.desc()).first()
-        latest_weight = float(latest_info.poids_moyen) if latest_info and latest_info.poids_moyen else None
-
-        # Estimate IC moyen (simplified): consommation_par_animal / latest_weight if available
-        ic_moyen = None
-        if latest_weight and latest_weight > 0:
-            ic_moyen = round(consommation_par_animal / latest_weight, 2)
-
-        taux_mortalite = round((float(b.nombre_morts_totaux or 0) / b.nombre_initial) * 100, 2) if b.nombre_initial else 0
-        taux_survie = round(100 - taux_mortalite, 2)
-
-        # Compute performance components
-        perf = compute_performance_for_band(b)
-
-        return jsonify({
-            'bande_id': b.id,
-            'nom_bande': b.nom_bande,
-            'race': b.race,
-            'traitements': [t.to_dict() for t in traitements],
-            'top_aliment': top_aliment,
-            'consommation_par_animal': round(consommation_par_animal, 2),
-            'ic_moyen': ic_moyen,
-            'taux_mortalite': taux_mortalite,
-            'taux_survie': taux_survie,
-            'performance': perf
-        })
-    except Exception as e:
-        current_app.logger.exception('Failed to fetch bande details: %s', e)
-        return jsonify({'error': str(e)}), 500
-

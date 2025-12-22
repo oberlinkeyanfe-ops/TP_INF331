@@ -1,0 +1,91 @@
+@startuml
+skinparam classAttributeIconSize 0
+hide empty members
+class Eleveur {
+  id : db.Integer, primary_key=True
+  nom : db.String(100
+  email : db.String(150
+  mot_de_passe : db.String(255
+  telephone : db.String(20
+  adresse : db.Text
+  created_at : db.DateTime, default=datetime.utcnow
+  updated_at : db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+}
+class Bande {
+  id : db.Integer, primary_key=True
+  eleveur_id : db.Integer, db.ForeignKey('eleveurs.id'
+  nom_bande : db.String(100
+  date_arrivee : db.Date, nullable=False
+  race : db.String(50
+  fournisseur : db.String(100
+  nombre_initial : db.Integer, nullable=False
+  poids_moyen_initial : db.Float
+  statut : db.String(20
+  duree_jours : db.Integer
+  age_moyen : db.Float
+  nombre_morts_totaux : db.Integer, default=0
+  cout_unitaire : db.Float
+  prix_achat_unitaire : db.Float, default=0.0
+  created_at : db.DateTime, default=datetime.utcnow
+  updated_at : db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+}
+class Consommation {
+  id : db.Integer, primary_key=True
+  bande_id : db.Integer, db.ForeignKey('bandes.id'
+  date : db.Date, nullable=False
+  type_aliment : db.String(50
+  cout_aliment : db.Float
+  aliment_kg : db.Float, nullable=False
+  eau_litres : db.Float, nullable=False
+  semaine_production : db.Integer
+  created_at : db.DateTime, default=datetime.utcnow
+}
+class AnimalInfo {
+  id : db.Integer, primary_key=True
+  bande_id : db.Integer, db.ForeignKey('bandes.id'
+  semaine_production : db.Integer, nullable=False
+  poids_moyen : db.Float
+  morts_semaine : db.Integer, default=0
+  animaux_restants : db.Integer
+  note : db.Text
+  created_at : db.DateTime, default=datetime.utcnow
+}
+class Traitement {
+  id : db.Integer, primary_key=True
+  bande_id : db.Integer, db.ForeignKey('bandes.id'
+  date : db.Date, nullable=False
+  produit : db.String(100
+  type_traitement : db.String(50
+  dosage : db.String(50
+  efficacite : db.Float
+  notes : db.Text
+  cout : db.Float
+  nombre_morts_apres : db.Integer, default=0
+  nombre_gueris_apres : db.Integer, default=0
+  created_at : db.DateTime, default=datetime.utcnow
+}
+class depense_elt {
+  id : db.Integer, primary_key=True
+  bande_id : db.Integer, db.ForeignKey('bandes.id'
+  date : db.Date, nullable=False
+  type_depense : db.String(50
+  description : db.Text
+  duree_heures : db.Float
+  created_at : db.DateTime, default=datetime.utcnow
+  cout : db.Float
+}
+class MessageChatbot {
+  id : db.Integer, primary_key=True
+  eleveur_id : db.Integer, db.ForeignKey('eleveurs.id'
+  message_utilisateur : db.Text, nullable=False
+  reponse_bot : db.Text, nullable=False
+  date_message : db.DateTime, default=datetime.utcnow
+  mode_utilise : db.String(20
+}
+Eleveur "1" -- "*" Bande : bandes
+Eleveur "1" -- "*" MessageChatbot : messages_chatbot
+Bande "1" -- "*" Consommation : consommations
+Bande "1" -- "*" AnimalInfo : animal_infos
+Bande "1" -- "*" depense_elt : depenses_elt
+Bande "1" -- "*" Traitement : traitements
+@enduml
