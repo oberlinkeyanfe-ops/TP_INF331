@@ -57,16 +57,7 @@
       </div>
     </div>
     <div class="chart-row">
-      <div class="chart-item">
-        <h3>Meilleur jour de vente</h3>
-        <div class="muted small">Marge = revenus - couts ; le point le plus haut indique le jour de vente cible.</div>
-        <chart-base
-          :chart-id="profitChartId"
-          :chart-type="'line'"
-          :height="260"
-          ref="profit"
-        />
-      </div>
+
       <div class="chart-item">
         <h3>Consommation projetée</h3>
         <chart-base
@@ -209,7 +200,6 @@ export default {
       weightChartId: `pred-weight-${suffix}`,
       survivalChartId: `pred-survival-${suffix}`,
       revenueChartId: `pred-revenue-${suffix}`,
-      profitChartId: `pred-profit-${suffix}`,
       consumptionChartId: `pred-consumption-${suffix}`,
       costChartId: `pred-cost-${suffix}`,
       costPieChartId: `pred-cost-pie-${suffix}`,
@@ -275,7 +265,6 @@ export default {
         this.renderCostPie();
         this.renderSurvival();
         this.renderRevenue();
-        this.renderProfit();
         this.renderConsumption();
         this.renderCost();
         this.renderGantt();
@@ -780,38 +769,7 @@ export default {
       c.getChartOptions = () => ({ responsive: true, maintainAspectRatio: false });
       this.$nextTick(() => c.renderChart());
     },
-    renderProfit() {
-      const c = this.$refs.profit;
-      if (!c) return;
-      const { labels, values } = this.baseDataScaled('marge');
-        const cumulative = values.map((_, i) => values.slice(0, i + 1).reduce((a, b) => a + b, 0));
-        const bestIdx = this.bestMarginIndexScaled(values);
-        const pointRadius = labels.map((_, idx) => idx === bestIdx ? 7 : 3);
-      c.getChartData = () => ({
-        labels,
-        datasets: [{
-          label: 'Cumul des marges (FCFA)',
-          data: cumulative,
-          borderColor: '#FF9800',
-          backgroundColor: 'rgba(255,152,0,0.15)',
-          borderWidth: 2,
-            tension: 0.25,
-            fill: true,
-            pointRadius
-          }, {
-            label: 'Marge quotidienne (FCFA)',
-            data: values,
-            borderColor: '#F97316',
-            backgroundColor: 'rgba(249,115,22,0.12)',
-            borderDash: [6, 6],
-            tension: 0.25,
-            fill: false,
-            pointRadius
-        }]
-      });
-      c.getChartOptions = () => ({ responsive: true, maintainAspectRatio: false });
-      this.$nextTick(() => c.renderChart());
-      },
+
       bestMarginIndexScaled(arr) {
         if (!arr || !arr.length) return -1;
         let maxVal = -Infinity;

@@ -6,7 +6,12 @@
         <img src="../assets/icons/LOGO.svg" alt="Logo" />
         <h1>AVICULTURE PRO</h1>
       </div>
-      <div class="poster-text">Créez un compte pour suivre vos cycles, centraliser vos coûts et bénéficier d'analyses IA personnalisées.</div>
+
+      <div class="poster-text">
+        <p>Bienvenue sur Aviculture Pro</p>
+        <p>Rejoignez notre communauté<br /> d'éleveurs et accédez à des <br />ressources,conseils et outils <br />pour optimiser votre activité <br />avicole.</p>
+      </div>
+      
     </div>
 
     <div class="auth-right auth-card">

@@ -69,7 +69,7 @@
           </div>
           <div class="detail-item">
             <span>Gain quotidien:</span>
-            <strong>{{ formatNumber(kpis.croissance.gain_quotidien) }} g/j</strong>
+            <strong>{{ formatNumber(kpis.croissance.gain_quotidien, 3) }} kg/j</strong>
           </div>
           <div class="detail-item">
             <span>Âge (semaines):</span>
@@ -430,14 +430,14 @@ export default {
         const last = weights[weights.length - 1];
         const weekDiff = Math.max(1, (last.semaine_production || 0) - (first.semaine_production || 0));
         const gainKg = (last.poids_moyen || 0) - (first.poids_moyen || 0);
-        const gainPerDay = (gainKg * 1000) / (weekDiff * 7);
-        return gainPerDay.toFixed(0);
+        const gainPerDay = (gainKg) / (weekDiff * 7); // kg per day
+        return Number(gainPerDay.toFixed(3));
       }
 
       const ageWeeks = this.getLatestAnimalWeek() || 0;
       const weight = this.getLatestAnimalWeight() || this.bandData.poids_moyen_initial || 0;
       const ageDays = ageWeeks * 7;
-      return ageDays > 0 ? (weight / ageDays * 1000).toFixed(0) : 0;
+      return ageDays > 0 ? Number((weight / ageDays).toFixed(3)) : 0;
     },
 
     calculateProductionCost() {

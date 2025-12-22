@@ -23,18 +23,24 @@ export function getROIClass(roi) {
 // Ajoutez ici d'autres méthodes spécifiques aux prédictions
 
 export function calculateAverageConsumptionFrom(vm) {
-  // Return average consumption PER BIRD per period (assume each record is a period total)
+  // Return average consumption PER BIRD PER DAY
+  // Consommation records may use different keys depending on source: prefer 'aliment_kg' or 'kg'
   if (!vm.consommations || vm.consommations.length === 0) return 0;
-  const totalKg = vm.consommations.reduce((sum, c) => sum + (Number(c.kg) || 0), 0);
+  const totalKg = vm.consommations.reduce((sum, c) => {
+    const kg = Number(c.aliment_kg ?? c.kg ?? c.alimentKg ?? 0) || 0;
+    return sum + kg;
+  }, 0);
   const periods = Math.max(1, vm.consommations.length);
   const birds = Number(vm.band?.nombre_initial || vm.currentAnimals || 1);
-  return birds > 0 ? (totalKg / periods) / birds : 0;
+  // assume each period is one week (7 days)
+  const avgPerBirdPerDay = birds > 0 ? (totalKg / periods) / birds / 7 : 0;
+  return avgPerBirdPerDay;
 }
 
 export function getAverageCostPerKgFrom(vm) {
   if (!vm.consommations || vm.consommations.length === 0) return 1.8;
-  const totalCost = vm.consommations.reduce((sum, c) => sum + (c.cout || 0), 0);
-  const totalKg = vm.consommations.reduce((sum, c) => sum + (c.kg || 0), 0);
+  const totalCost = vm.consommations.reduce((sum, c) => sum + (Number(c.cout_aliment ?? c.cout ?? c.coutAliment ?? 0) || 0), 0);
+  const totalKg = vm.consommations.reduce((sum, c) => sum + (Number(c.aliment_kg ?? c.kg ?? c.alimentKg ?? 0) || 0), 0);
   return totalKg > 0 ? totalCost / totalKg : 1.8;
 }
 
@@ -49,7 +55,58 @@ export function findOptimalSellingDateFrom(predictions) {
 }
 
 export function generatePredictions(vm) {
-  const days = parseInt(vm.predictionDays) || 7;
+  // Reset any previous error
+  vm.predictionErrorMsg = '';
+
+  // Determine horizon requested by user (7/14/30) and current band duration
+  const desiredDays = parseInt(vm.predictionDays) || 7;
+  const durationDays = Number(vm.band?.duree_jours || 0);
+  const currentWeek = Number(vm.currentProductionWeek || vm.animalAgeWeeks || 0);
+
+  // If band has a duration defined, compute remaining days; otherwise allow desiredDays
+  let remainingDays = durationDays > 0 ? Math.max(0, durationDays - (currentWeek * 7)) : null;
+
+  // If band is finished (remainingDays === 0) block predictions and mark terminee
+  if (remainingDays === 0) {
+    vm.predictions = [];
+    vm.totalPredictedProfit = 0;
+    vm.predictionErrorMsg = "La bande a atteint sa durée : aucune prédiction possible.";
+    if (vm.band && vm.band.statut !== 'terminee') {
+      vm.band.statut = 'terminee';
+      try {
+        fetch(`http://localhost:5000/bandes/${vm.band.id}`, {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ statut: 'terminee' })
+        }).then(res => res.ok ? null : console.warn('Failed set status terminee for band', res.status));
+      } catch (e) { console.warn('Failed to persist statut terminee:', e); }
+    }
+    return;
+  }
+
+  // Decide how many days to predict: either desiredDays or capped by remainingDays when duration exists
+  let daysToPredict = desiredDays;
+  if (remainingDays !== null) {
+    daysToPredict = Math.min(desiredDays, remainingDays);
+  }
+
+  if (!daysToPredict || daysToPredict <= 0) {
+    vm.predictions = [];
+    vm.totalPredictedProfit = 0;
+    vm.predictionErrorMsg = "Aucune période restante pour prédire jusqu'à la fin.";
+    return;
+  }
+
+  // Notice: if the requested horizon is longer than remaining days, inform the user
+  if (remainingDays !== null && daysToPredict < desiredDays) {
+    vm.predictionNotice = `Horizon réduit à ${daysToPredict} jour(s) (fin de bande plus proche).`;
+  } else {
+    vm.predictionNotice = '';
+  }
+
+  const days = daysToPredict;
+
   vm.predictions = [];
   vm.totalPredictedProfit = 0;
   let runningPredCost = 0;

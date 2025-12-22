@@ -116,27 +116,7 @@
 
 
         <div class="dashboard-container tab-offset">
-            <div>
-              <div class="chart-header" style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-                <label style="font-weight:600;color:var(--text-muted);">Sélectionner la bande :</label>
-                <select v-model="selectedBandIdForChart" @change="onSelectBandForChart" style="padding:8px;border-radius:8px;border:1px solid var(--border-color);min-width:220px;">
-                  <option value="">-- Choisir une bande --</option>
-                  <option v-for="b in bands" :key="b.id" :value="b.id">{{ b.nom_bande }} ({{ b.date_arrivee }})</option>
-                </select>
-                <div style="margin-left:auto;color:var(--muted);font-size:0.95rem">Affiche la courbe de croissance</div>
-              </div>
 
-              <AnimalWeeklyLine
-                :bands="bands"
-                :selectedBand="selectedBandIdForChart"
-                @select-band="onSelectBandForChart"
-                :labels="bandWeeklyLabels"
-                :series="bandWeeklySeries"
-                title="Poids moyen hebdomadaire"
-                unit=" kg"
-              />
-              <div v-if="chartLoading" style="color:var(--muted); font-size:0.95rem;margin-top:8px">Chargement…</div>
-            </div>
           
           <DashboardGlobal ref="dashboardGlobal" />
         </div>
@@ -175,8 +155,12 @@
               </div>
               <div>
                 <label>Performance</label>
-                <span :class="{'good-perf': getBandPerformance(band.id) >= 75, 'warn-perf': getBandPerformance(band.id) >= 50 && getBandPerformance(band.id) < 75, 'bad-perf': getBandPerformance(band.id) < 50}">
-                  {{ getBandPerformance(band.id) !== null ? getBandPerformance(band.id) + '%' : '—' }}
+                <span :class="{
+                    'good-perf': (getBandPerformance(band.id) !== null && getBandPerformance(band.id) >= 75),
+                    'warn-perf': (getBandPerformance(band.id) !== null && getBandPerformance(band.id) >= 50 && getBandPerformance(band.id) < 75),
+                    'bad-perf': (getBandPerformance(band.id) !== null && getBandPerformance(band.id) < 50)
+                  }">
+                  {{ getBandPerformanceDisplay(band.id) }}
                 </span>
                 <button v-if="getBandPerformance(band.id) !== null" class="btn-small" @click.stop="showPerfBreakdown(band.id)">Détails</button>
               </div>
@@ -230,50 +214,72 @@
             <button class="close-btn" @click="closeAndReset">×</button>
           </div>
           <form @submit.prevent="createBande" class="modal-form">
-            <div class="form-group">
-              
-            </div>
-            <div class="form-row">
-              <div class="form-group">
-
-                <label>Nom de la bande</label>
-                <input v-model="form.nom_bande" type="text" placeholder="Ex: Lot #45" required />
-
-                <label>Durée</label>
-                <input v-model="form.duree_semaines" type="number"/>
-
-
-                <label>Race</label>
-                <select v-model="form.race">
-                  <option value="Ross308">Ross308</option>
-                  <option value="Cobb500">Cobb500</option>
-                </select>
-
-                <label>Fournisseur</label>
-                <select v-model="form.fournisseur">
-                  <option value="">-- Sélectionner --</option>
-                  <option value="FournisseurA">FournisseurA</option>
-                  <option value="FournisseurB">FournisseurB</option>
-                  <option value="FournisseurC">FournisseurC</option>
-                  <option value="FournisseurD">FournisseurD</option>
-                </select>
-
-                <label>Poids moyen initial (g)</label>
-                <input v-model.number="form.poids_moyen_initial" type="number" placeholder="Ex: 40" min="0" />
+            <div class="form-grid">
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Nom de la bande</label>
+                  <input v-model="form.nom_bande" type="text" placeholder="Ex: Lot #45" required />
+                </div>
+                <div class="form-group">
+                  <label>Effectif initial</label>
+                  <input v-model.number="form.nombre_initial" type="number" required />
+                </div>
               </div>
-              <div class="form-group">
-                <label>Effectif initial</label>
-                <input v-model.number="form.nombre_initial" type="number" required />
 
-                <label>Date d'arrivée</label>
-                <input v-model="form.date_arrivee" type="date" required />
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Date d'arrivée</label>
+                  <input v-model="form.date_arrivee" type="date" required />
+                </div>
+                <div class="form-group">
+                  <label>Durée (semaines)</label>
+                  <input v-model.number="form.duree_semaines" type="number" min="1" />
+                </div>
+              </div>
 
-                <label>Status</label>
-                <select v-model="form.statut">
-                  <option value="active">Active</option>
-                  <option value="archive">archive</option>
-                  <option value="termine">Termine</option>
-                </select>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Prix d'achat unitaire (FCFA)</label>
+                  <input v-model.number="form.prix_achat_unitaire" type="number" step="1" placeholder="Ex: 1500" min="0" />
+                </div>
+                <div class="form-group">
+                  <label>Poids moyen initial (kg)</label>
+                  <input v-model.number="form.poids_moyen_initial" type="number" step="0.01" placeholder="Ex: 0.04" min="0" max="2" />
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Race</label>
+                  <select v-model="form.race">
+                    <option value="">-- Sélectionner --</option>
+                    <option value="Ross308">Ross308</option>
+                    <option value="Cobb500">Cobb500</option>
+                    <option value="Bobb500">Bobb500</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Fournisseur</label>
+                  <select v-model="form.fournisseur">
+                    <option value="">-- Sélectionner --</option>
+                    <option value="FournisseurA">FournisseurA</option>
+                    <option value="FournisseurB">FournisseurB</option>
+                    <option value="FournisseurC">FournisseurC</option>
+                    <option value="FournisseurD">FournisseurD</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Statut</label>
+                  <select v-model="form.statut">
+                    <option value="active">Active</option>
+                    <option value="archive">Archivée</option>
+                    <option value="terminee">Terminée</option>
+                  </select>
+                </div>
+                <div class="form-group"></div>
               </div>
             </div>
               
@@ -449,6 +455,7 @@ export default {
         nombre_initial: 0,
         duree_semaines: 8,
         poids_moyen_initial: 0,
+        prix_achat_unitaire: 0,
         statut: 'active'
       };
       this.bandsError = '';
@@ -642,6 +649,7 @@ export default {
         const resp = await api.get('/dashboard/performance/map');
         const map = resp && resp.band_performance_map ? resp.band_performance_map : {};
         this.bandPerformanceMap = map;
+        console.log('Home: fetched band_performance_map from backend', map);
         try { localStorage.setItem('band_performance_map', JSON.stringify(map)); } catch (e) { /* ignore */ }
       } catch (e) {
         console.warn('Failed to fetch performance map from backend:', e);
@@ -666,6 +674,14 @@ export default {
     getBandPerformance(bandId) {
       const val = this.bandPerformanceMap && this.bandPerformanceMap[bandId];
       return typeof val === 'number' ? val : null;
+    },
+
+    getBandPerformanceDisplay(bandId) {
+      // If backend explicitly flagged no consumption data, show infinity symbol
+      const statusKey = this.bandPerformanceMap && this.bandPerformanceMap[`status_${bandId}`];
+      if (statusKey === 'no_consumption') return '∞';
+      const val = this.getBandPerformance(bandId);
+      return (typeof val === 'number') ? val + '%' : '—';
     },
 
     loadCachedData() {

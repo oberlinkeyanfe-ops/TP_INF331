@@ -46,3 +46,6 @@ blinker==1.6.3
 openpyxl==3.1.2
 XlsxWriter==3.1.9
 reportlab==4.0.6
+
+# Scheduling
+APScheduler==3.10.1

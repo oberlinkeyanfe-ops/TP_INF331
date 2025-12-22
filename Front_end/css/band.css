@@ -1225,16 +1225,30 @@ button.back:hover { opacity: 1; }
 .consumption-rules li { margin-bottom: 4px; }
 
 .form-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 14px 16px;
+    display: flex;
+    flex-direction: column;
+}
+
+.form-group{
+    display: flex;
 }
 .form-grid label {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    font-size: 13px;
+    margin-bottom: 0;
     color: var(--text-dark);
+    font-weight: 600;
+}
+.form-row {
+    display: flex;
+    align-items: start;
+    gap: 40px;
+}
+@media (max-width: 720px) {
+    .form-row {
+        grid-template-columns: 1fr;
+    }
 }
 .form-grid span { font-weight: 600; color: var(--text-dark); }
 select .disabled-week { color: #9ca3af; }

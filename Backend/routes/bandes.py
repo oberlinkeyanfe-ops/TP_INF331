@@ -101,6 +101,30 @@ def seed_full():
         return jsonify({'error': str(e)}), 500
 
 
+@bandes_bp.route('/reset-seed', methods=['POST', 'GET'])
+def reset_seed():
+    """Delete bands and child data for an eleveur and re-run seed (creates bands then populates time-series in kg).
+    - Query param: ?eleveur=ID or use session eleveur
+    """
+    if 'eleveur_id' in session:
+        target = session.get('eleveur_id')
+    else:
+        try:
+            target = int(request.args.get('eleveur')) if request.args.get('eleveur') else None
+        except Exception:
+            target = None
+
+    if not target:
+        return jsonify({'error': 'eleveur id required (session or ?eleveur=ID)'}), 400
+
+    try:
+        from init_data import reset_and_rerun_seed_for_eleveur
+        res = reset_and_rerun_seed_for_eleveur(current_app, target)
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @bandes_bp.route('/gestion')
 def gestion_bandes():
     """Retourne les données de gestion des bandes"""
@@ -143,6 +167,24 @@ def create_bande():
         if not nom_bande or not date_arrivee or not nombre_initial:
             return jsonify({'error': 'Champs requis manquants: nom_bande, date_arrivee, nombre_initial'}), 400
 
+        # Normalize poids_moyen_initial input (accept grams for backward compatibility) and cap at 2kg
+        pmi = float(data.get('poids_moyen_initial', 0) or 0)
+        if pmi and pmi > 10:
+            pmi = pmi / 1000.0
+        if pmi and pmi > 2.0:
+            pmi = 2.0
+
+        prix_achat = float(data.get('prix_achat_unitaire') or 0.0)
+        # Support frontend sending 'duree_semaines' — convert to days for storage
+        duree_semaines = data.get('duree_semaines')
+        try:
+            if duree_semaines is not None and str(duree_semaines) != '':
+                duree_jours = int(float(duree_semaines)) * 7
+            else:
+                duree_jours = int(data.get('duree_jours') or 0) or None
+        except Exception:
+            duree_jours = int(data.get('duree_jours') or 0) or None
+
         bande = Bande(
             eleveur_id=eleveur_id,
             nom_bande=nom_bande,
@@ -150,11 +192,12 @@ def create_bande():
             race=data.get('race'),
             fournisseur=data.get('fournisseur'),
             nombre_initial=int(nombre_initial),
-            poids_moyen_initial=float(data.get('poids_moyen_initial', 0) or 0),
-            duree_jours=int(data.get('duree_jours') or 0) or None,
+            poids_moyen_initial=pmi,
+            duree_jours=duree_jours,
             age_moyen=float(data.get('age_moyen', 0) or 0),
             nombre_morts_totaux=int(data.get('nombre_morts_totaux', 0) or 0),
-            statut=data.get('statut', 'active')
+            statut=data.get('statut', 'active'),
+            prix_achat_unitaire=prix_achat
         )
 
         db.session.add(bande)
@@ -213,7 +256,19 @@ def update_bande(id):
                 elif key in ['nombre_initial', 'nombre_morts_totaux']:
                     setattr(bande, key, int(value) if value else 0)
                 elif key in ['poids_moyen_initial', 'age_moyen']:
-                    setattr(bande, key, float(value) if value else 0)
+                    # Normalize poids_moyen_initial input (accept grams for backward compatibility)
+                    if key == 'poids_moyen_initial':
+                        try:
+                            v = float(value) if value else 0
+                            if v and v > 10:
+                                v = v / 1000.0
+                            if v and v > 2.0:
+                                v = 2.0
+                        except Exception:
+                            v = 0
+                        setattr(bande, key, v)
+                    else:
+                        setattr(bande, key, float(value) if value else 0)
                 elif key == 'duree_jours':
                     setattr(bande, key, int(value) if value else None)
                 else:
@@ -381,6 +436,20 @@ def sync_all_compteurs():
         return jsonify({'success': True, 'updated_count': 0, 'message': 'Compteur supprimé (animaux retirés)'});
     except Exception as e:
         db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@bandes_bp.route('/terminate-finished', methods=['POST'])
+def terminate_finished():
+    """Déclenche la vérification et la terminaison des bandes arrivées à leur date de fin.
+    Accessible en POST (admin) : retourne {'updated_count': N, 'updated_ids': [...]}
+    """
+    try:
+        from services.auto_termination import terminate_finished_bandes
+        res = terminate_finished_bandes()
+        return jsonify(res)
+    except Exception as e:
+        print('Error terminating finished bands:', e)
         return jsonify({'error': str(e)}), 500
 
 

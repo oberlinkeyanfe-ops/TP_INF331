@@ -118,6 +118,9 @@
               placeholder="Rechercher (onglet, action...)"
             />
             <img src="../assets/icons/search.svg">
+          </div>
+
+
             <ul class="search-suggestions" v-if="searchResults.length">
               <li
                 v-for="(item, idx) in searchResults"
@@ -132,9 +135,12 @@
                 <div v-if="item.hint" class="search-hint">{{ item.hint }}</div>
               </li>
             </ul>
-          </div>
-          <button class="ai" :class="{ active: activeTab === 'chatbot' }"
+            <button class="ai" :class="{ active: activeTab === 'chatbot' }" style="margin-right:8px; margin-bottom: 20px; width: 50px;"
             @click="selectTab('chatbot')"></button>
+            <button class="btn" style="width: 120px; height: 40px;font-size: 11px; margin-right:0px;" @click="exportBandPdf" :disabled="exportingBandPdf">
+              <i class="fas fa-file-pdf"></i>
+              {{ exportingBandPdf ? 'Génération...' : 'Exporter' }}
+            </button>
         </div>
       </header>
 
@@ -500,76 +506,83 @@
               <span class="pill subtle">3. Prix unitaire (pas 25 FCFA)</span>
             </div>
             <div class="form-grid">
-              <label>
-                <span>Semaine de production</span>
-                <select v-model.number="consumptionForm.semaine_production" required :disabled="!band">
-                  <option value="">Sélectionner une semaine</option>
-                  <option
-                    v-for="week in weekOptions"
-                    :key="week.week"
-                    :value="week.week"
-                    :disabled="week.disabled"
-                    :class="{ 'disabled-week': week.disabled }"
-                  >
-                    S{{ week.week }}<span v-if="week.disabled"> (remplie)</span>
-                  </option>
-                </select>
-              </label>
-              <label>
-                <span>Type d'aliment</span>
-                <select v-model="consumptionForm.type" required>
-                  <option value="">Choisir un type</option>
-                  <option value="Démarrage">Démarrage</option>
-                  <option value="Croissance">Croissance</option>
-                  <option value="Finition">Finition</option>
-                  <option value="Autre">Autre</option>
-                </select>
-              </label>
+              <div class="form-row">
+                <label>
+                  <span>Semaine de production</span>
+                  <select v-model.number="consumptionForm.semaine_production" required :disabled="!band">
+                    <option value="">Sélectionner une semaine</option>
+                    <option
+                      v-for="week in weekOptions"
+                      :key="week.week"
+                      :value="week.week"
+                      :disabled="week.disabled"
+                      :class="{ 'disabled-week': week.disabled }"
+                    >
+                      S{{ week.week }}<span v-if="week.disabled"> (remplie)</span>
+                    </option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Type d'aliment</span>
+                  <select v-model="consumptionForm.type" required>
+                    <option value="">Choisir un type</option>
+                    <option value="Démarrage">Démarrage</option>
+                    <option value="Croissance">Croissance</option>
+                    <option value="Finition">Finition</option>
+                    <option value="Autre">Autre</option>
+                  </select>
+                </label>
               
-              <label>
-                <span>Quantité (kg)</span>
-                <input
-                  type="number"
-                  v-model.number="consumptionForm.kg"
-                  placeholder="Kg"
-                  step="0.01"
-                  required
-                  @input="updateCostPreview"
-                />
-              </label>
-              <label>
-                <span>PU aliment (FCFA/kg)</span>
-                <input
-                  type="number"
-                  v-model.number="consumptionForm.prix_unitaire"
-                  placeholder="Ex: 450"
-                  step="25"
-                  min="0"
-                  @input="updateCostPreview"
-                />
-              </label>
-              <label>
-                <span>Eau (L)</span>
-                <input
-                  type="number"
-                  v-model.number="consumptionForm.eau_litres"
-                  placeholder="Litres d'eau"
-                  step="0.01"
-                  min="0"
-                  @input="updateCostPreview"
-                />
-              </label>
-              <label>
-                <span>PU eau (FCFA/L)</span>
-                <input
-                  type="number"
-                  v-model.number="consumptionForm.prix_eau_unitaire"
-                  placeholder="Ex: 25"
-                  step="25"
-                  min="0"
-                  @input="updateCostPreview"
-                />
-              </label>
+                <label>
+                  <span>Quantité (kg)</span>
+                  <input
+                    type="number"
+                    v-model.number="consumptionForm.kg"
+                    placeholder="Kg"
+                    step="0.01"
+                    required
+                    @input="updateCostPreview"
+                  />
+                </label>
+
+                <label>
+                  <span>PU aliment (FCFA/kg)</span>
+                  <input
+                    type="number"
+                    v-model.number="consumptionForm.prix_unitaire"
+                    placeholder="Ex: 450"
+                    step="25"
+                    min="0"
+                    @input="updateCostPreview"
+                  />
+                </label>
+              </div>
+              <div class="form-row">
+                <label>
+                  <span>Eau (L)</span>
+                  <input
+                    type="number"
+                    v-model.number="consumptionForm.eau_litres"
+                    placeholder="Litres d'eau"
+                    step="0.01"
+                    min="0"
+                    @input="updateCostPreview"
+                  />
+                </label>
+
+                <label>
+                  <span>PU eau (FCFA/L)</span>
+                  <input
+                    type="number"
+                    v-model.number="consumptionForm.prix_eau_unitaire"
+                    placeholder="Ex: 25"
+                    step="25"
+                    min="0"
+                    @input="updateCostPreview"
+                  />
+                </label>
+              </div>
             </div>
             <div class="cost-preview" v-if="consumptionFormCostPreview > 0">
               <strong>Coût estimé:</strong> {{ formatCurrencyFCFA(consumptionFormCostPreview) }}
@@ -727,8 +740,17 @@
         >
           <h2>Predictions</h2>
 
-          <div v-if="predictionErrorMsg" class="alert warning">
-            {{ predictionErrorMsg }}
+          <div v-if="predictionWarning" class="alert medium">
+            <span class="alert-icon">⚠️</span>
+            <strong>{{ predictionWarning }}</strong>
+          </div>
+          <div v-else-if="predictionNoticeComputed" class="alert medium">
+            <span class="alert-icon">⚠️</span>
+            <strong>{{ predictionNoticeComputed }}</strong>
+          </div>
+          <div v-else-if="predictionErrorMsg" class="alert medium">
+            <span class="alert-icon">⚠️</span>
+            <strong>{{ predictionErrorMsg }}</strong>
           </div>
 
           <div v-else-if="!predictions.length" class="muted" style="margin: 8px 0 12px;">
@@ -751,14 +773,15 @@
             <div class="control-card action-card">
               <div class="control-head">
                 <span class="eyebrow">Lancer</span>
-                <p>Générer les prévisions</p>
+                <p>Générer les prévisions (projection jusqu'à la fin restante de la bande)</p>
+                <p class="muted small">Affichage: {{ predictionDays==='14' ? 'tous les 2 jours' : (predictionDays==='30' ? 'par semaine' : 'quotidien') }}</p>
               </div>
-              <button @click="generatePredictions" class="btn-primary">Générer</button>
+              <button @click="generatePredictions" :disabled="band?.statut === 'terminee'" class="btn-primary">Générer</button>
             </div>
           </div>
 
           <div class="prediction-charts">
-            <PredictionCharts :predictions="predictions" />
+            <PredictionCharts :predictions="displayedPredictions" />
           </div>
 
           <div class="predictions-table">
@@ -777,7 +800,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="p in predictions" :key="p.jour">
+                <tr v-for="p in displayedPredictions" :key="p.jour">
                   <td>J+{{ p.jour }}</td>
                   <td>{{ p.date }}</td>
                   <td>{{ p.poids.toFixed(2) }}</td>
@@ -923,6 +946,8 @@
               </div>
               <div class="info-rows">
                 <div class="row"><span>Nom</span><strong>{{ band?.nom_bande || '—' }}</strong></div>
+                <div class="row"><span>Prix d'achat / poule</span><strong>{{ band?.prix_achat_unitaire ? formatCurrencyFCFA(band.prix_achat_unitaire,0) : '—' }}</strong></div>
+                <div class="row"><span>Coût achat total</span><strong>{{ band?.prix_achat_unitaire ? formatCurrencyFCFA((band.prix_achat_unitaire || 0) * (band.nombre_initial || 0), 0) : '—' }}</strong></div>
                 <div class="row"><span>Race</span><strong>{{ band?.race || '—' }}</strong></div>
                 <div class="row"><span>Lot / Fournisseur</span><strong>{{ band?.fournisseur || '—' }}</strong></div>
                 <div class="row"><span>Statut</span><strong>{{ band?.statut || '—' }}</strong></div>
@@ -1046,7 +1071,7 @@
                       </label>
                       <label>
                         Poids moyen (kg)
-                        <input type="number" step="0.01" min="0" v-model.number="animalInfoForm.poids_moyen" />
+                        <input type="number" step="0.01" min="0" max="2" v-model.number="animalInfoForm.poids_moyen" />
                       </label>
                     </div>
 
@@ -1685,6 +1710,7 @@ import * as messageMethods from './methods/messageMethods.js';
 import * as traitementsMethods from './methods/traitementsMethods.js';
 import * as depensesMethods from './methods/depensesMethods.js';
 import * as gainsMethods from './methods/gainsMethods.js';
+import { API_BASE_URL } from '../services/api.js';
 
 export default {
   name: 'Bandes',
@@ -1737,6 +1763,7 @@ export default {
         prix_unitaire: 0,
         prix_eau_unitaire: 25
       },
+      exportingBandPdf: false,
       editingConsumptionId: null,
       consumptionFormCostPreview: 0,
       filledWeeks: new Map(),
@@ -1756,15 +1783,18 @@ export default {
         note: ''
       },
       editingAnimalInfoId: null,
+      // consumptionReference: now expressed per bird ranges and cumulative ranges (kg)
+      // Fields: per_bird_low, per_bird_high, cumulative_low, cumulative_high, eau_litres optional
+      // This allows computing per-bande totals by multiplying per-bird averages by population when needed.
       consumptionReference: [
-        { week: 1, aliment_kg: 150, eau_litres: 300, prix_unitaire: 0.45 },
-        { week: 2, aliment_kg: 420, eau_litres: 640, prix_unitaire: 0.45 },
-        { week: 3, aliment_kg: 730, eau_litres: 980, prix_unitaire: 0.48 },
-        { week: 4, aliment_kg: 1100, eau_litres: 1350, prix_unitaire: 0.5 },
-        { week: 5, aliment_kg: 1450, eau_litres: 1680, prix_unitaire: 0.52 },
-        { week: 6, aliment_kg: 1750, eau_litres: 1900, prix_unitaire: 0.55 },
-        { week: 7, aliment_kg: 1950, eau_litres: 2050, prix_unitaire: 0.58 },
-        { week: 8, aliment_kg: 2050, eau_litres: 2150, prix_unitaire: 0.6 }
+        { week: 1, per_bird_low: 0.13, per_bird_high: 0.167, cumulative_low: 0.13, cumulative_high: 0.167, eau_litres: 300 },
+        { week: 2, per_bird_low: 0.28, per_bird_high: 0.375, cumulative_low: 0.42, cumulative_high: 0.542, eau_litres: 640 },
+        { week: 3, per_bird_low: 0.47, per_bird_high: 0.65, cumulative_low: 0.88, cumulative_high: 1.192, eau_litres: 980 },
+        { week: 4, per_bird_low: 0.64, per_bird_high: 0.945, cumulative_low: 1.55, cumulative_high: 2.137, eau_litres: 1350 },
+        { week: 5, per_bird_low: 0.85, per_bird_high: 1.215, cumulative_low: 2.40, cumulative_high: 3.352, eau_litres: 1680 },
+        { week: 6, per_bird_low: 1.07, per_bird_high: 1.434, cumulative_low: 3.45, cumulative_high: 4.786, eau_litres: 1900 },
+        { week: 7, per_bird_low: 1.18, per_bird_high: 1.593, cumulative_low: 4.66, cumulative_high: 6.379, eau_litres: 2050 },
+        { week: 8, per_bird_low: 1.30, per_bird_high: 1.691, cumulative_low: 5.96, cumulative_high: 8.07, eau_litres: 2150 }
       ],
       weightReference: [
         { week: 1, low: 0.08, high: 0.12 },
@@ -2246,7 +2276,8 @@ export default {
     },
 
     totalCostsAll() {
-      return this.totalCost + this.totalExpensesElementaires + this.totalTreatmentCost;
+      const purchaseCost = (this.band?.prix_achat_unitaire || 0) * (this.band?.nombre_initial || 0);
+      return this.totalCost + this.totalExpensesElementaires + this.totalTreatmentCost + purchaseCost;
     },
 
     profitComputed() { return gainsMethods.computeProfitComputed(this); },
@@ -2304,6 +2335,33 @@ export default {
       return { value: withWeight[0].poids_moyen, week: withWeight[0].semaine_production };
     },
 
+    // Prédictions affichées : échantillonnage selon l'horizon choisi
+    //  - 7 jours : affichage quotidien
+    //  - 14 jours : saut de 2 jours (J1, J3, J5...)
+    //  - 30 jours : affichage par semaine (J7, J14, J21, J28)
+    displayedPredictions() {
+      const preds = this.predictions || [];
+      const desired = parseInt(this.predictionDays) || (preds.length || 7);
+      const step = desired === 14 ? 2 : (desired === 30 ? 7 : 1);
+      if (!preds.length) return preds;
+      if (step === 1) return preds;
+      if (step === 2) return preds.filter(p => ((p.jour - 1) % 2) === 0);
+      // weekly (30d) -> pick end-of-week checkpoints
+      if (step === 7) {
+        const out = [];
+        const days = preds.length;
+        const weeks = Math.ceil(days / 7);
+        for (let w = 1; w <= weeks; w++) {
+          const targetDay = w * 7;
+          let sel = preds.find(p => p.jour === targetDay);
+          if (!sel) sel = [...preds].reverse().find(p => p.jour <= targetDay);
+          if (sel) out.push(sel);
+        }
+        return out;
+      }
+      return preds;
+    },
+
     survivalPerformance() {
       const initial = this.band?.nombre_initial || 0;
       if (!initial) return 0;
@@ -2331,6 +2389,35 @@ export default {
 
     animalLineLabels() {
       return this.animalInfos.map(info => `S${info.semaine_production}`);
+    },
+
+    // Remaining days for the band (null if not defined)
+    predictionRemainingDays() {
+      const durationDays = Number(this.band?.duree_jours || 0);
+      if (!durationDays || durationDays <= 0) return null;
+      const currentWeek = Number(this.currentProductionWeek || this.animalAgeWeeks || 0);
+      const remaining = Math.max(0, durationDays - (currentWeek * 7));
+      return remaining;
+    },
+
+    // Warning to show if band is already terminated or no remaining days
+    predictionWarning() {
+      if (!this.band) return '';
+      if (this.band.statut === 'terminee') return 'La bande est terminée : aucune prédiction possible.';
+      const remaining = this.predictionRemainingDays;
+      if (remaining === 0) return 'La bande a atteint sa durée : aucune prédiction possible.';
+      return '';
+    },
+
+    // If requested horizon is larger than remaining days, show notice (warning)
+    predictionNoticeComputed() {
+      const remaining = this.predictionRemainingDays;
+      const desired = parseInt(this.predictionDays) || 7;
+      if (remaining === null) return '';
+      if (remaining > 0 && remaining < desired) {
+        return `Horizon réduit à ${remaining} jour(s) (fin de bande plus proche).`;
+      }
+      return '';
     },
 
     animalMortalitySeries() {
@@ -2720,11 +2807,10 @@ export default {
       const refCost = Array(duration).fill(null);
 
       for (let i = 0; i < duration; i += 1) {
-        const refWeek = ref.find(r => r.week === i + 1);
-        if (!refWeek) continue;
-        refKg[i] = refWeek.aliment_kg || 0;
-        const waterRef = refWeek.eau_litres || 0;
-        refCost[i] = (avgFeedPrice || 0) * (refWeek.aliment_kg || 0) + (avgWaterPrice || 0) * waterRef;
+        const weekNum = i + 1;
+        const waterRef = (ref.find(r => r.week === weekNum) || {}).eau_litres || 0;
+        refKg[i] = this.getRefAlimentKgForWeek(weekNum, population);
+        refCost[i] = (avgFeedPrice || 0) * (refKg[i] || 0) + (avgWaterPrice || 0) * waterRef;
       }
 
       const ratios = refKg.map((rk, i) => {
@@ -3102,6 +3188,47 @@ export default {
       alert(msg);
     },
 
+    async exportBandPdf() {
+      if (this.exportingBandPdf) return;
+      if (!this.band || !this.band.id) { alert('Aucune bande sélectionnée'); return; }
+      try {
+        this.exportingBandPdf = true;
+        const backendUrl = `${API_BASE_URL}/dashboard/report/bande/${this.band.id}/pdf`;
+        console.debug('Export Band PDF: fetching', backendUrl);
+        const resp = await fetch(backendUrl, { credentials: 'include' });
+        if (resp.status === 401) {
+          alert('Votre session a expiré — veuillez vous reconnecter.');
+          if (this.$router) this.$router.push({ name: 'Login' }); else window.location.href = '/login';
+          return;
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => null);
+          throw new Error(text || 'Échec de génération du PDF');
+        }
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/pdf')) {
+          const text = await resp.text().catch(() => null);
+          console.error('Export Band PDF: unexpected content-type', contentType, text);
+          alert('Erreur: le serveur n’a pas renvoyé un PDF valide. Voir console pour détails.');
+          window.open(backendUrl, '_blank');
+          return;
+        }
+        const blob = await resp.blob();
+        const filename = resp.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `rapport_bande_${this.band.nom_bande || this.band.id}.pdf`;
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (e) {
+        console.error('Export Band PDF failed', e);
+        alert('Erreur lors de la génération du PDF. Vérifiez le serveur.');
+      } finally {
+        this.exportingBandPdf = false;
+      }
+    },
+
     updateCostPreview() { return consommationMethods.updateCostPreview(this); },
 
     averageUnitPrice(type) {
@@ -3125,6 +3252,33 @@ export default {
       return arr.reduce((a, b) => a + b, 0) / arr.length;
     },
 
+    // Return per-bird average for a reference week (midpoint of low/high) or null
+    getRefPerBird(week) {
+      const refWeek = (this.consumptionReference || []).find(r => r.week === week);
+      if (!refWeek) return null;
+      if (refWeek.per_bird_low != null && refWeek.per_bird_high != null) {
+        return (Number(refWeek.per_bird_low) + Number(refWeek.per_bird_high)) / 2.0;
+      }
+      // Fallback: if aliment_kg provided, divide by default population
+      if (refWeek.aliment_kg != null && this.band?.nombre_initial) {
+        return (refWeek.aliment_kg / Number(this.band.nombre_initial));
+      }
+      return null;
+    },
+
+    // Return per-band total aliment_kg for a reference week, using population (fallback to band.nombre_initial)
+    getRefAlimentKgForWeek(week, population) {
+      const pop = Number(population ?? (this.band?.nombre_initial || 0)) || 0;
+      const refWeek = (this.consumptionReference || []).find(r => r.week === week);
+      if (!refWeek) return 0;
+      if (refWeek.per_bird_low != null && refWeek.per_bird_high != null) {
+        const perBird = (Number(refWeek.per_bird_low) + Number(refWeek.per_bird_high)) / 2.0;
+        return +(perBird * pop).toFixed(3);
+      }
+      // fallback to legacy aliment_kg
+      return Number(refWeek.aliment_kg || 0);
+    },
+
     getLastWeekStats() {
       if (!this.consommations.length) return null;
       const last = [...this.consommations]
@@ -3133,12 +3287,12 @@ export default {
       if (!last) return null;
 
       const week = last.semaine_production;
-      const refWeek = (this.consumptionReference || []).find(r => r.week === week);
       const avgFeed = this.averageUnitPrice('aliment');
       const avgWater = this.averageUnitPrice('eau');
 
-      const refKg = refWeek?.aliment_kg || 0;
-      const refEau = refWeek?.eau_litres || 0;
+      const population = Number(this.band?.nombre_initial || 0) || 0;
+      const refKg = this.getRefAlimentKgForWeek(week, population);
+      const refEau = ((this.consumptionReference || []).find(r => r.week === week) || {}).eau_litres || 0;
       const refCost = Math.round((avgFeed || 0) * refKg + (avgWater || 0) * refEau);
 
       const actualKg = Number(last.kg || 0);
@@ -3363,6 +3517,30 @@ export default {
           }
 
           console.log('Band data loaded from DB:', bandData);
+
+          // If the band has already reached its duration, mark it terminated (and persist)
+          try {
+            const durationWeeks = Math.floor((this.band?.duree_jours || this.band?.duree || 0) / 7);
+            const arrived = this.band?.date_arrivee ? new Date(this.band.date_arrivee).getTime() : null;
+            const weeksSinceArrival = arrived ? Math.floor((Date.now() - arrived) / (7 * 24 * 60 * 60 * 1000)) : null;
+            const currentWeek = this.animalAgeWeeks || (weeksSinceArrival ?? 0);
+
+            if (durationWeeks && currentWeek >= durationWeeks) {
+              if (this.band.statut !== 'terminee') {
+                this.band.statut = 'terminee';
+                try {
+                  fetch(`http://localhost:5000/bandes/${this.id}`, {
+                    method: 'PUT',
+                    credentials: 'include',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ statut: 'terminee' })
+                  }).then(res => {
+                    if (!res.ok) console.warn('Failed to persist terminee status for band', this.id, res.status);
+                  }).catch(e => console.warn('Error persisting terminee status', e));
+                } catch (e) { console.warn('Failed to set terminee status:', e); }
+              }
+            }
+          } catch (e) { console.warn('Error checking/completing band termination:', e); }
         }
       } catch (error) {
         console.warn('Error loading band data from DB:', error);

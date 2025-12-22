@@ -32,10 +32,16 @@
             <button class="btn-icon" @click="fetchWithCustom" title="Appliquer">OK</button>
           </div>
 
-          <button class="btn btn-primary" @click="fetchNow" :disabled="loadingDashboard">
-            <i class="fas fa-sync-alt" :class="{'spin': loadingDashboard}"></i>
-            {{ loadingDashboard ? 'Analyse en cours...' : 'Actualiser' }}
-          </button>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button class="btn btn-primary" @click="fetchNow" :disabled="loadingDashboard">
+              <i class="fas fa-sync-alt" :class="{'spin': loadingDashboard}"></i>
+              {{ loadingDashboard ? 'Analyse en cours...' : 'Actualiser' }}
+            </button>
+            <button class="btn" @click="exportGlobalPdf" :disabled="exportingPdf">
+              <i class="fas fa-file-pdf"></i>
+              {{ exportingPdf ? 'Génération...' : 'Exporter PDF' }}
+            </button>
+          </div>
         </div>
       </div>
     </header>
@@ -73,17 +79,24 @@
         <div class="kpi-card">
           <div class="kpi-icon bg-teal-100 text-teal-600">💰</div>
           <div>
-            <div style="display:flex; gap:8px; align-items:center;">
+            <div style="display:flex;  align-items:center;">
               <label style="font-size:12px; color:#6b7280;">Bande</label>
-              <select v-model="selectedCoutBandId" class="custom-select" @change="onCoutBandChange">
+              <select v-model="selectedCoutBandId" class="custom-select" @change="onCoutBandChange" style="width: 7vw;">
                 <option value="" disabled v-if="!coutsData.length">Chargement...</option>
                 <option v-for="c in coutsData" :key="c.bande_id" :value="c.bande_id">{{ c.nom_bande }}</option>
               </select>
             </div>
             <div>
               <div class="kpi-value">{{ formatCurrency((selectedBandCost && selectedBandCost.cout_total) || 0) }}</div>
-              <div class="kpi-label">Dépenses (bande sélectionnée)</div>
+              <div class="kpi-label">Dépenses par bande</div>
             </div>
+          </div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon bg-blue-100 text-blue-600">📈</div>
+          <div>
+            <div class="kpi-value">{{ globalPerformance !== null ? (globalPerformance + '%') : '—' }}</div>
+            <div class="kpi-label">Performance Globale</div>
           </div>
         </div>
       </div>
@@ -127,16 +140,20 @@
             </div>
           </div>
 
-          <!-- Prediction -->
-          <div class="insight-card prediction">
-            <div class="insight-icon"><i class="fas fa-chart-line"></i></div>
+          <!-- Best treatment per disease (based on top-performing bands) -->
+          <div class="insight-card best-treatment">
+            <div class="insight-icon"><i class="fas fa-pills"></i></div>
             <div class="insight-content">
-              <h4>Projection de Croissance</h4>
-              <p>
-                Croissance moy. observée : <strong>{{ avgGrowthRate }}g/semaine</strong>.
-                À ce rythme, les bandes actives atteindront leur poids cible dans ~{{ estWeeksToTarget }} semaines.
-              </p>
-              <div class="insight-tag info">Prévision</div>
+              <h4>Meilleur produit par pathologie </h4>
+              <p v-if="!bestProductsByDisease.length" class="muted">Aucune donnée de traitements disponibles pour les bandes performantes.</p>
+              <ul v-else class="treatment-list">
+                <li v-for="item in bestProductsByDisease.slice(0, 3)" :key="item.disease">
+                  <strong>{{ item.disease }}</strong> —
+                  <span class="prod">{{ item.product }}</span>
+                  <small class="muted">{{ item.avgEffic !== null ? `(efficacité moyenne ${item.avgEffic}%)` : `(utilisé ${item.count} fois)` }}</small>
+                </li>
+              </ul>
+              <div class="insight-tag info">Analyse traitements</div>
             </div>
           </div>
 
@@ -182,10 +199,20 @@
           <div class="chart-card">
             <div class="card-header">
               <h3>📈 Courbe de Croissance</h3>
-              <p>Poids moyen (g) vs Semaine</p>
+              <p>Poids moyen (kg) vs Semaine</p>
             </div>
             <div class="chart-container">
-              <GlobalTrendsLine :trendData="dashboardData?.weight_trend || []" color="#10b981" />
+              <div class="chart-header-inline" style="display:flex;align-items:center;gap:12px;margin-bottom:10px;">
+                <label style="font-weight:600;color:#6b7280;">Bande</label>
+                <select v-model="selectedGrowthBandId" @change="onSelectGrowthBand" class="custom-select" style="min-width:200px;padding:6px;border-radius:8px;border:1px solid var(--border);">
+                  <option value="">Toutes les bandes (moyenne)</option>
+                  <option v-for="b in bandsForSelector" :key="b.bande_id || b.id" :value="b.bande_id || b.id">{{ b.nom_bande || b.nom_bande }}</option>
+                </select>
+                <div style="margin-left:auto;color:var(--muted);font-size:0.9rem">Affiche la courbe pour la bande sélectionnée</div>
+              </div>
+
+              <GlobalTrendsLine :trendData="growthTrendData" color="#10b981" />
+              <div v-if="growthLoading" style="color:var(--muted); font-size:0.95rem;margin-top:8px">Chargement…</div>
             </div>
           </div>
 
@@ -210,16 +237,21 @@
                 <div v-for="bande in coutsData.slice(0, 5)" :key="bande.bande_id" class="fin-item">
                   <div class="fin-header">
                     <span class="fin-name">{{ bande.nom_bande }}</span>
-                    <span class="fin-total">{{ formatCurrency(bande.cout_total) }}</span>
+                    <div style="text-align:right;">
+                      <div class="fin-total">{{ formatCurrency(bande.cout_total) }}</div>
+                      <div class="fin-sub text-muted">Achat animaux: {{ formatCurrency(bande.cout_achat_animaux || 0) }}</div>
+                    </div>
                   </div>
                   <div class="fin-bar-bg">
                     <div class="fin-bar-segment feed" :style="{width: getPercent(bande.cout_aliment, bande.cout_total) + '%'}" title="Aliment"></div>
                     <div class="fin-bar-segment treat" :style="{width: getPercent(bande.cout_traitements, bande.cout_total) + '%'}" title="Traitements"></div>
+                    <div class="fin-bar-segment achat" :style="{width: getPercent(bande.cout_achat_animaux, bande.cout_total) + '%'}" title="Achat animaux"></div>
                     <div class="fin-bar-segment other" :style="{width: getPercent(bande.cout_depenses, bande.cout_total) + '%'}" title="Autres"></div>
                   </div>
                   <div class="fin-legend-mini">
                     <span class="dot feed"></span> Alim
                     <span class="dot treat"></span> Soins
+                    <span class="dot achat"></span> Achat animaux
                     <span class="dot other"></span> Autre
                   </div>
                 </div>
@@ -304,7 +336,7 @@
                   <td>{{ bande.consommation_par_animal }} kg</td>
                   <td>{{ formatCurrency(bande.gains) }}</td>
                   <td>
-                    <div class="score-circle" :style="{borderColor: getScoreColor(bande.score)}">{{ Math.round(bande.score * 10) / 10 }}</div>
+                    <div class="score-circle" :style="{borderColor: getScoreColor(bande.score)}">{{ getBandScoreDisplay(bande) }}</div>
                   </td>
                   <td>
                     <span class="recommendation-text" :class="getRecommendationClass(bande)">
@@ -333,7 +365,7 @@
 </template>
 
 <script>
-import { api } from '../services/api.js';
+import { api, API_BASE_URL } from '../services/api.js';
 import GlobalComparisonBar from './charts/GlobalComparisonBar.vue';
 import GlobalMortalityBar from './charts/GlobalMortalityBar.vue';
 import GlobalTrendsLine from './charts/GlobalTrendsLine.vue';
@@ -369,7 +401,28 @@ export default {
       tableSearch: '',
       tableSort: 'performance',
       avgGrowthRate: 0,
-      estWeeksToTarget: 0
+      estWeeksToTarget: 0,
+      globalPerformance: null,
+      exportingPdf: false,
+
+      // Best treatments per disease (computed from top-performing bands)
+      bestProductsByDisease: [],
+      treatmentProductDiseases: {
+        'Baytril': ['salmonellose','colibacillose','entérite'],
+        'Lévomycétine': ['entérite','respiratoire'],
+        'Dithrim': ['respiratoire','entérite'],
+        'Furazolidone': ['entérite'],
+        'Tétracycline': ['respiratoire','digestif'],
+        'Biomycine': ['croissance','prévention'],
+        'Sulfadimezin': ['coccidiose','respiratoire','typhoïde'],
+        'Chlortétracycline': ['coccidiose','pneumonie','mycoplasmose']
+      },
+
+      // Growth chart per-band
+      selectedGrowthBandId:'',
+      growthLabels: [],
+      growthSeries: [],
+      growthLoading: false
     };
   },
   watch: {
@@ -419,10 +472,132 @@ export default {
       });
 
       return data;
+    },
+    // Bands available for the growth selector (prefer performanceData, else coutsData)
+    bandsForSelector() {
+      if (this.performanceData && this.performanceData.length) return this.performanceData;
+      if (this.coutsData && this.coutsData.length) return this.coutsData;
+      return [];
+    },
+    // Growth trend to feed the GlobalTrendsLine: per-band if selected, else aggregated dashboard weight_trend
+    growthTrendData() {
+      if (this.growthSeries && this.growthSeries.length) {
+        return this.growthLabels.map((lbl, idx) => ({ week: Number(lbl.replace(/^S/, '')) || idx + 1, mean_weight: this.growthSeries[idx] || 0 }));
+      }
+      return this.dashboardData?.weight_trend || [];
     }
   },
   methods: {
+    async exportGlobalPdf() {
+      if (this.exportingPdf) return;
+      try {
+        this.exportingPdf = true;
+        // Open in new tab to allow browser to handle download & cookies
+        const url = '/dashboard/report/pdf';
+        // Use fetch to download blob from the BACKEND and force download filename
+        const backendUrl = `${API_BASE_URL}/dashboard/report/pdf`;
+        console.debug('Export PDF: fetching', backendUrl);
+        const resp = await fetch(backendUrl, { credentials: 'include' });
+        // If user is not authenticated, redirect to login with helpful message
+        if (resp.status === 401) {
+          alert('Votre session a expiré — veuillez vous reconnecter.');
+          // use router to navigate to the login page
+          if (this.$router) this.$router.push({ name: 'Login' });
+          else window.location.href = '/login';
+          return;
+        }
+        if (!resp.ok) {
+          const text = await resp.text().catch(() => null);
+          throw new Error(text || 'Échec de génération du PDF');
+        }
+        const contentType = resp.headers.get('Content-Type') || '';
+        if (!contentType.includes('application/pdf')) {
+          // If the server returned HTML or JSON (e.g., session lost), show helpful error
+          const text = await resp.text().catch(() => null);
+          console.error('Export PDF: unexpected content-type', contentType, text);
+          alert('Erreur: le serveur n’a pas renvoyé un PDF valide. Voir console pour détails.');
+          // Fallback: open the URL in a new tab so the browser handles login / download
+          window.open(url, '_blank');
+          return;
+        }
+        const blob = await resp.blob();
+        const filename = resp.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || 'rapport_global.pdf';
+        const link = document.createElement('a');
+        link.href = window.URL.createObjectURL(blob);
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } catch (e) {
+        console.error('Export PDF failed', e);
+        alert('Erreur lors de la génération du PDF. Vérifiez le serveur.');
+      } finally {
+        this.exportingPdf = false;
+      }
+    },
 
+    async computeBestProductsByDisease() {
+      this.bestProductsByDisease = [];
+      try {
+        const bands = (this.performanceData || []).filter(b => typeof b.score === 'number').sort((a, b) => (b.score || 0) - (a.score || 0)).slice(0, 3);
+        if (!bands.length) return;
+        const prodStats = {};
+        for (const b of bands) {
+          try {
+            const resp = await api.get(`/traitements/bande/${b.bande_id}`);
+            const treatments = Array.isArray(resp) ? resp : (resp.traitements || []);
+            for (const t of treatments) {
+              const prod = (t.produit || t.produit || '').trim();
+              if (!prod) continue;
+              const eff = (t.efficacite != null && !isNaN(Number(t.efficacite))) ? Number(t.efficacite) : null;
+              if (!prodStats[prod]) prodStats[prod] = { sumE: 0, cntE: 0, cnt: 0 };
+              if (eff !== null) { prodStats[prod].sumE += eff; prodStats[prod].cntE += 1; }
+              prodStats[prod].cnt += 1;
+            }
+          } catch (e) {
+            console.warn('Failed fetch treatments for band', b, e);
+          }
+        }
+
+        const diseaseMap = {};
+        for (const prod of Object.keys(prodStats)) {
+          const stat = prodStats[prod];
+          const avg = stat.cntE ? (stat.sumE / stat.cntE) : null;
+          const count = stat.cnt;
+          const diseases = (this.treatmentProductDiseases && this.treatmentProductDiseases[prod]) ? this.treatmentProductDiseases[prod] : [];
+          if (!diseases.length) {
+            const d = 'Général';
+            diseaseMap[d] = diseaseMap[d] || [];
+            diseaseMap[d].push({ product: prod, avgEffic: avg, count });
+          } else {
+            for (const d of diseases) {
+              diseaseMap[d] = diseaseMap[d] || [];
+              diseaseMap[d].push({ product: prod, avgEffic: avg, count });
+            }
+          }
+        }
+
+        const result = [];
+        for (const d of Object.keys(diseaseMap)) {
+          const candidates = diseaseMap[d];
+          candidates.sort((a, b) => {
+            if (a.avgEffic === null && b.avgEffic !== null) return 1;
+            if (b.avgEffic === null && a.avgEffic !== null) return -1;
+            if (a.avgEffic !== null && b.avgEffic !== null) {
+              if (b.avgEffic !== a.avgEffic) return b.avgEffic - a.avgEffic;
+            }
+            return b.count - a.count;
+          });
+          const win = candidates[0];
+          result.push({ disease: d, product: win.product, avgEffic: win.avgEffic !== null ? Math.round(win.avgEffic * 100) / 100 : null, count: win.count });
+        }
+
+        this.bestProductsByDisease = result.sort((a,b) => a.disease.localeCompare(b.disease));
+      } catch (e) {
+        console.warn('computeBestProductsByDisease error', e);
+        this.bestProductsByDisease = [];
+      }
+    },
     onCoutBandChange() {
       // no-op for now — computed selectedBandCost will reflect selection
     },
@@ -433,23 +608,33 @@ export default {
     applyLocalPerformanceMap() {
       try {
         const raw = localStorage.getItem('band_performance_map');
-        if (!raw) return;
+        if (!raw) {
+          console.log('applyLocalPerformanceMap: no map in localStorage');
+          return;
+        }
         const map = JSON.parse(raw);
         if (!map || typeof map !== 'object') return;
+        console.log('applyLocalPerformanceMap: applying map', map);
         // Apply map to performanceData entries
         this.performanceData = (this.performanceData || []).map(b => {
           const id = Number(b.bande_id || b.bandeId || b.id);
           if (!id) return b;
-          if (typeof map[id] === 'number') {
-            return { ...b, performance_percent: map[id], score: map[id] };
+          // prefer explicit numeric mapping
+          if (Object.prototype.hasOwnProperty.call(map, String(id)) && typeof map[String(id)] === 'number') {
+            const val = Number(map[String(id)]);
+            return { ...b, performance_percent: val, score: val, performance_status: null };
           }
           // also accept components_{id}
           const compKey = `components_${id}`;
-          if (map[compKey]) {
-            // compute average if needed
+          if (Object.prototype.hasOwnProperty.call(map, compKey) && map[compKey]) {
             const subs = Object.values(map[compKey]).filter(v => typeof v === 'number');
             const avg = subs.length ? Math.round(subs.reduce((a, c) => a + c, 0) / subs.length) : null;
-            if (avg !== null) return { ...b, performance_percent: avg, score: avg };
+            if (avg !== null) return { ...b, performance_percent: avg, score: avg, performance_status: null };
+          }
+          // check for status_{id}
+          const statusKey = `status_${id}`;
+          if (Object.prototype.hasOwnProperty.call(map, statusKey)) {
+            return { ...b, performance_percent: null, score: null, performance_status: map[statusKey] };
           }
           return b;
         });
@@ -461,6 +646,35 @@ export default {
         console.warn('applyLocalPerformanceMap failed', e);
       }
     },
+
+
+    // Fetch and update growth data for selected band
+    async onSelectGrowthBand() {
+      const id = this.selectedGrowthBandId;
+      if (!id) {
+        this.growthLabels = [];
+        this.growthSeries = [];
+        this.calculateProjections();
+        return;
+      }
+
+      try {
+        this.growthLoading = true;
+        const res = await api.get(`/animal-info/bande/${id}`);
+        const infos = Array.isArray(res.animal_info) ? res.animal_info : [];
+        infos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
+        this.growthLabels = infos.map(i => `S${i.semaine_production}`);
+        this.growthSeries = infos.map(i => (typeof i.poids_moyen === 'number' ? i.poids_moyen : (i.poids_moyen ? Number(i.poids_moyen) : 0)));
+        this.calculateProjections();
+      } catch (e) {
+        console.error('Erreur onSelectGrowthBand:', e);
+        this.growthLabels = [];
+        this.growthSeries = [];
+      } finally {
+        this.growthLoading = false;
+      }
+    },
+
     
     getMortalityClass(val) {
       if (val < 2) return 'bg-success';
@@ -468,19 +682,25 @@ export default {
       return 'bg-danger';
     },
     getScoreColor(score) {
+      if (typeof score !== 'number') return '#9ca3af';
       if (score > 80) return '#10b981';
       if (score > 50) return '#f59e0b';
       return '#ef4444';
     },
+    getBandScoreDisplay(bande) {
+      if (bande && bande.performance_status === 'no_consumption') return '∞';
+      if (bande && typeof bande.score === 'number') return Math.round(bande.score * 10) / 10;
+      return '—';
+    },
     getRecommendation(bande) {
       if (bande.taux_mortalite > 5) return '🚨 Vérifier Protocole Sanitaire';
       if (bande.consommation_par_animal > 5 && bande.taux_mortalite < 2) return '📉 Optimiser Ration (Gaspillage?)';
-      if (bande.score > 80) return '⭐ Modèle à reproduire';
+      if (typeof bande.score === 'number' && bande.score > 80) return '⭐ Modèle à reproduire';
       return '✔️ Performance Standard';
     },
     getRecommendationClass(bande) {
       if (bande.taux_mortalite > 5) return 'text-danger';
-      if (bande.score > 80) return 'text-success';
+      if (typeof bande.score === 'number' && bande.score > 80) return 'text-success';
       return 'text-muted';
     },
 
@@ -513,8 +733,19 @@ export default {
             this.performanceData = perf.performance || perf || [];
           } catch (e) { console.warn('Perf fallback failed'); }
         }
+        console.log('Dashboard: performanceData after fetch', this.performanceData);
 
-        // 2.5 Apply local precomputed performance map if present (override server values)
+        // 2.5 Fetch authoritative performance map from backend and persist
+        try {
+          const mapResp = await api.get('/dashboard/performance/map');
+          const mapObj = (mapResp && mapResp.band_performance_map) ? mapResp.band_performance_map : {};
+          try { localStorage.setItem('band_performance_map', JSON.stringify(mapObj)); } catch (e) { /* ignore */ }
+          console.log('Dashboard: fetched band_performance_map from backend', mapObj);
+        } catch (e) {
+          console.warn('Failed to fetch performance map from backend for dashboard', e);
+        }
+
+        // Apply local precomputed performance map if present (override server values)
         this.applyLocalPerformanceMap();
 
 
@@ -533,6 +764,18 @@ export default {
         // 5. Calculations
         this.computeScoresAndBestBand();
         this.calculateProjections();
+        // 5.5 Compute best treatment per disease based on top-performing bands
+        try { await this.computeBestProductsByDisease(); } catch (e) { console.warn('computeBestProductsByDisease failed', e); }
+
+        // Set default growth band selector if none (prefer performanceData then coutsData)
+        try {
+          const source = (this.performanceData && this.performanceData.length) ? this.performanceData : (this.coutsData && this.coutsData.length ? this.coutsData : []);
+          if (source.length && !this.selectedGrowthBandId) {
+            // default to first band
+            this.selectedGrowthBandId = source[0].bande_id || source[0].id || '';
+            await this.onSelectGrowthBand();
+          }
+        } catch (e) { /* ignore */ }
 
         // 6. Fetch Best Band Details for Recommendation
         if (this.bestBand && this.bestBand.bande_id) {
@@ -540,6 +783,17 @@ export default {
             this.bestBandDetails = await api.get(`/dashboard/bande/details/${this.bestBand.bande_id}`);
           } catch (e) { console.warn(e); }
         }
+
+        // end of fetch
+
+        // Fetch global performance (weighted) and set KPI
+        try {
+          const gp = await api.get('/dashboard/performance/global');
+          if (gp && gp.global_performance_percent !== undefined) this.globalPerformance = gp.global_performance_percent;
+        } catch (e) { console.warn('Failed to fetch global performance', e); }
+
+        // helper available: export PDF of the global report
+        // (no-op here)
 
         // Listen for local storage perf map updates and re-apply if they occur
         if (!this._storageListenerAdded) {
@@ -556,6 +810,34 @@ export default {
         this.loadingDashboard = false;
       }
     },
+
+    // Fetch and update growth data for selected band
+    async onSelectGrowthBand() {
+      const id = this.selectedGrowthBandId;
+      if (!id) {
+        this.growthLabels = [];
+        this.growthSeries = [];
+        this.calculateProjections();
+        return;
+      }
+
+      try {
+        this.growthLoading = true;
+        const res = await api.get(`/animal-info/bande/${id}`);
+        const infos = Array.isArray(res.animal_info) ? res.animal_info : [];
+        infos.sort((a, b) => (a.semaine_production || 0) - (b.semaine_production || 0));
+        this.growthLabels = infos.map(i => `S${i.semaine_production}`);
+        this.growthSeries = infos.map(i => (typeof i.poids_moyen === 'number' ? i.poids_moyen : (i.poids_moyen ? Number(i.poids_moyen) : 0)));
+        this.calculateProjections();
+      } catch (e) {
+        console.error('Erreur onSelectGrowthBand:', e);
+        this.growthLabels = [];
+        this.growthSeries = [];
+      } finally {
+        this.growthLoading = false;
+      }
+    },
+
 
     buildQueryString() {
       const parts = [];
@@ -595,14 +877,20 @@ export default {
       const sorted = [...valid].sort((a, b) => (b.score || 0) - (a.score || 0));
       this.bestBand = sorted[0];
       if (this.bestBand) this.bestBand.performancePercent = Math.round(this.bestBand.score || 0);
+
+      // ensure growth selector options reflect current bands
+      // no-op here; we will use a computed that picks from performanceData/coutsData
     },
 
 
     calculateProjections() {
-      // Simple linear projection based on weight trend
-      const trends = this.dashboardData?.weight_trend || [];
-      if (trends.length < 2) { this.avgGrowthRate = 0; return; }
-      
+      // Simple linear projection based on weight trend (use growthTrendData computed)
+      const trends = this.growthTrendData || [];
+      if (trends.length < 2) {
+        this.avgGrowthRate = 0;
+        return;
+      }
+
       // Avg growth per week (last few points)
       const last = trends[trends.length - 1];
       const prev = trends[0]; // simplistic over total period
@@ -610,7 +898,7 @@ export default {
       if (weeks > 0) {
         this.avgGrowthRate = Math.round((last.mean_weight - prev.mean_weight) / weeks);
       }
-      
+
       const targetWeight = 2500; // Example target for broilers
       if (last.mean_weight < targetWeight && this.avgGrowthRate > 0) {
         this.estWeeksToTarget = Math.ceil((targetWeight - last.mean_weight) / this.avgGrowthRate);
@@ -686,7 +974,11 @@ html { font-size: 1px; }
 .insight-tag.alert { background: #fee2e2; color: #991b1b; }
 .insight-tag.ok { background: #d1fae5; color: #065f46; }
 .insight-tag.info { background: #ede9fe; color: #5b21b6; }
-
+/* Treatment list (best products by disease) — larger, clearer text */
+.treatment-list { margin: 8px 0 12px; padding: 0; list-style: none; }
+.treatment-list li { font-size: 10px; line-height: 1.35; margin-bottom: 6px; color: var(--text-sec); }
+.treatment-list .prod { font-size: 11px; font-weight: 700; margin-left: 6px; color: var(--text-main); }
+.treatment-list small.muted { font-size: 13px; color: #6b7280; margin-left: 8px; }
 /* Charts & Tables */
 .chart-card { background: white; border-radius: 20px; padding: 24px; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.05); display: flex; flex-direction: column; height: 100%; }
 .card-header { margin-bottom: 20px; }
@@ -747,8 +1039,11 @@ html { font-size: 1px; }
 .fin-bar-segment { height: 100%; }
 .fin-bar-segment.feed { background: var(--primary); }
 .fin-bar-segment.treat { background: #f87171; }
+.fin-bar-segment.achat { background: #f59e0b; }
 .fin-bar-segment.other { background: #94a3b8; }
 .fin-legend-mini { display: flex; gap: 12px; margin-top: 4px; font-size: 11px; color: #6b7280; }
+.fin-sub { font-size: 12px; color: #6b7280; margin-top: 4px; }
+.dot.achat { background: #f59e0b; }
 .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 4px; }
 .dot.feed { background: var(--primary); } .dot.treat { background: #f87171; } .dot.other { background: #94a3b8; }
 

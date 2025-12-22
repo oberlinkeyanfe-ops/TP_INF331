@@ -33,7 +33,7 @@ export default {
       const values = (this.trendData || []).map(t => Number(t.mean_weight || 0));
       const ACCENT = (getComputedStyle(document.documentElement).getPropertyValue('--primary-accent') || '#6f42c1').trim();
       const fill = ACCENT.includes('rgba') ? ACCENT : `${ACCENT}1A`;
-      return { labels, datasets: [{ label: 'Poids moyen (g)', data: values, borderColor: ACCENT, backgroundColor: fill, tension: 0.3, fill: true }] };
+      return { labels, datasets: [{ label: 'Poids moyen (kg)', data: values, borderColor: ACCENT, backgroundColor: fill, tension: 0.3, fill: true }] };
     },
     getChartOptions() {
       return { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, title: { display: true, text: 'g' } } } };
